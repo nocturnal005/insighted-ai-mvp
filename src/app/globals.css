@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-inter: "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-zinc-50 text-zinc-900;
+  }
+
+  /* WCAG 2.2 AA — clear, high-contrast focus ring everywhere. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent-600 ring-offset-2 ring-offset-white;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer components {
+  .skip-link {
+    @apply absolute left-3 top-3 z-50 -translate-y-20 rounded-lg bg-accent-600 px-4 py-2
+      text-sm text-white transition focus:translate-y-0;
+  }
+
+  /* Small uppercase section label used throughout the minimalist UI. */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-zinc-400;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900
+      placeholder:text-zinc-400 focus:border-accent-500;
+  }
+}
