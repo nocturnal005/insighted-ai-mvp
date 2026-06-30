@@ -53,6 +53,7 @@ export async function createStemTask(formData: FormData) {
 /** Re-draft when the style changes (descriptive / instructional / assessment-safe). */
 export async function restyleStem(taskId: string, style: DescriptionStyle) {
   const user = requireUser();
+  if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
   const task = getStemTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked");
@@ -69,6 +70,7 @@ export async function restyleStem(taskId: string, style: DescriptionStyle) {
 
 export async function updateStem(taskId: string, editedDescription: string) {
   const user = requireUser();
+  if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
   const task = getStemTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked");
@@ -79,11 +81,15 @@ export async function updateStem(taskId: string, editedDescription: string) {
   revalidatePath(`/stem/${taskId}`);
 }
 
-export async function approveStem(taskId: string) {
+export async function approveStem(taskId: string, editedDescription?: string) {
   const user = requireUser();
   if (!can(user.role, "stem.approve")) throw new Error("Only a teacher or QTVI can approve");
   const task = getStemTask(taskId);
   if (!task) throw new Error("Not found");
+
+  // Approve exactly what the reviewer sees: commit the current editor text first,
+  // so unsaved edits are never silently discarded at approval.
+  if (typeof editedDescription === "string") task.editedDescription = editedDescription;
 
   task.status = "approved";
   task.approvedBy = user.id;

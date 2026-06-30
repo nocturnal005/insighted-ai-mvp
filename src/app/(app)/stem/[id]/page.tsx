@@ -40,7 +40,7 @@ export default function StemDetailPage({ params }: { params: { id: string } }) {
         task={task}
         upload={upload}
         structure={STRUCTURE_TEMPLATES[task.visualType]}
-        permissions={{ canApprove: can(user.role, "stem.approve"), canExport: can(user.role, "export") }}
+        permissions={{ canEdit: can(user.role, "description.edit"), canApprove: can(user.role, "stem.approve"), canExport: can(user.role, "export") }}
       />
     </div>
   );

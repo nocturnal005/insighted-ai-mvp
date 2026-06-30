@@ -39,6 +39,7 @@ export default function VisualDetailPage({ params }: { params: { id: string } })
         task={task}
         upload={upload}
         permissions={{
+          canEdit: can(user.role, "description.edit"),
           canApprove: can(user.role, "visual.approve"),
           canReject: can(user.role, "task.reject"),
           canExport: can(user.role, "export"),

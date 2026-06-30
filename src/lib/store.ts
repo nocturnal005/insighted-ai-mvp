@@ -281,6 +281,36 @@ export function recordCorrection(params: {
   });
 }
 
+/**
+ * Securely deletes stored upload binaries whose retention window has elapsed. For each
+ * removed file it nulls the referencing task's uploadId (across all modules) and writes a
+ * `data.delete` audit entry so the deletion itself is accountable. Returns the count removed.
+ *
+ * This makes the retention setting functional: in production the same call also unlinks the
+ * object from secure file storage. Task metadata and the audit trail are deliberately kept.
+ */
+export function purgeExpiredUploads(actor: { id: string; fullName: string }, retentionDays: number): number {
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const expired = db.uploads.filter((u) => new Date(u.createdAt).getTime() < cutoff);
+
+  for (const up of expired) {
+    for (const t of db.brailleTasks) if (t.uploadId === up.id) t.uploadId = null;
+    for (const t of db.visualTasks) if (t.uploadId === up.id) t.uploadId = null;
+    for (const t of db.stemTasks) if (t.uploadId === up.id) t.uploadId = null;
+    recordAudit({
+      actorId: actor.id,
+      actorName: actor.fullName,
+      action: "data.delete",
+      objectType: "Upload",
+      objectLabel: up.fileName,
+    });
+  }
+
+  const expiredIds = new Set(expired.map((u) => u.id));
+  db.uploads = db.uploads.filter((u) => !expiredIds.has(u.id));
+  return expired.length;
+}
+
 export function findUser(userId: string): User | undefined {
   return db.users.find((u) => u.id === userId);
 }
