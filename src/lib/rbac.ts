@@ -9,7 +9,6 @@ export type Permission =
   | "transcription.verify"
   | "feedback.generate"
   | "feedback.approve"
-  | "description.edit"
   | "visual.approve"
   | "stem.approve"
   | "export"
@@ -24,14 +23,13 @@ const VERIFIER: Permission[] = [
   "transcription.verify",
   "feedback.generate",
   "feedback.approve",
-  "description.edit",
   "visual.approve",
   "stem.approve",
   "export",
 ];
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  teaching_assistant: ["task.create", "transcription.edit", "description.edit", "export"],
+  teaching_assistant: ["task.create", "transcription.edit", "export"],
   teacher: VERIFIER,
   qtvi: [...VERIFIER, "audit.read"],
   senco: ["task.create", "task.archive", "audit.read", "export"],

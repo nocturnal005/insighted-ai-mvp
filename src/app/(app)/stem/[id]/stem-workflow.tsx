@@ -14,7 +14,7 @@ const STYLES: { value: DescriptionStyle; label: string }[] = [
   { value: "assessment_safe", label: "Assessment-safe" },
 ];
 
-interface Perms { canEdit: boolean; canApprove: boolean; canExport: boolean }
+interface Perms { canApprove: boolean; canExport: boolean }
 
 export function StemWorkflow({ task, upload, structure, permissions }: { task: StemTask; upload: SourceUpload | null; structure: string[]; permissions: Perms }) {
   const approved = task.status === "approved";
@@ -44,7 +44,7 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
       </Card>
 
       {/* Style selector — re-drafts the description */}
-      {!approved && permissions.canEdit && (
+      {!approved && (
         <Card>
           <CardHeader><CardTitle>Description style</CardTitle><span className="text-xs text-zinc-400">Changing style re-drafts the text</span></CardHeader>
           <CardBody>
@@ -77,7 +77,7 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
       <Card>
         <CardHeader><CardTitle>Structured description</CardTitle>{!approved && <span className="text-xs text-zinc-400">Draft · editable</span>}</CardHeader>
         <CardBody className="space-y-4">
-          <textarea value={text || task.editedDescription} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={9} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
+          <textarea value={text || task.editedDescription} onChange={(e) => setText(e.target.value)} readOnly={approved} rows={9} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
 
           {approved ? (
             <>
@@ -86,11 +86,9 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
             </>
           ) : (
             <div className="flex flex-wrap items-center justify-end gap-2.5">
-              {permissions.canEdit && (
-                <button onClick={() => run("save", () => updateStem(task.id, text || task.editedDescription))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
-              )}
+              <button onClick={() => run("save", () => updateStem(task.id, text || task.editedDescription))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
               {permissions.canApprove ? (
-                <button onClick={() => run("approve", () => approveStem(task.id, text || task.editedDescription))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve & save to record</button>
+                <button onClick={() => run("approve", () => approveStem(task.id))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve & save to record</button>
               ) : (<span className="text-xs text-zinc-400">A teacher or QTVI must approve this.</span>)}
             </div>
           )}

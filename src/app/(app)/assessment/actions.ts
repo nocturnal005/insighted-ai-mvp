@@ -52,7 +52,6 @@ export async function createVisualTask(formData: FormData) {
 
 export async function updateVisual(taskId: string, editedDescription: string, hintTier: HintTier) {
   const user = requireUser();
-  if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
   const task = getVisualTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked");
@@ -64,16 +63,11 @@ export async function updateVisual(taskId: string, editedDescription: string, hi
   revalidatePath(`/assessment/${taskId}`);
 }
 
-export async function approveVisual(taskId: string, editedDescription?: string, hintTier?: HintTier) {
+export async function approveVisual(taskId: string) {
   const user = requireUser();
   if (!can(user.role, "visual.approve")) throw new Error("Only a teacher or QTVI can approve");
   const task = getVisualTask(taskId);
   if (!task) throw new Error("Not found");
-
-  // Approve exactly what the reviewer sees: commit the current editor text/tier first,
-  // so unsaved edits are never silently discarded at approval.
-  if (typeof editedDescription === "string") task.editedDescription = editedDescription;
-  if (hintTier) task.hintTier = hintTier;
 
   task.status = "approved";
   task.approvedBy = user.id;

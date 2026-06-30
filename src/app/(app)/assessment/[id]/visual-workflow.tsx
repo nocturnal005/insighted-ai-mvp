@@ -14,7 +14,7 @@ const TIERS: { value: HintTier; label: string; blurb: string }[] = [
   { value: "tier_2", label: "Tier 2", blurb: "Teacher-controlled support (not formal assessment)" },
 ];
 
-interface Perms { canEdit: boolean; canApprove: boolean; canReject: boolean; canExport: boolean }
+interface Perms { canApprove: boolean; canReject: boolean; canExport: boolean }
 
 export function VisualWorkflow({ task, upload, permissions }: { task: VisualDescriptionTask; upload: SourceUpload | null; permissions: Perms }) {
   const approved = task.status === "approved";
@@ -62,7 +62,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
               <div key={i} className="flex items-center gap-2.5 rounded-lg bg-caution-50 px-3 py-2 text-sm text-caution-700">
                 <EyeOff className="h-4 w-4 shrink-0" />
                 <span className="flex-1"><span className="font-medium">“{f.text}”</span> — {f.reason}</span>
-                {!approved && permissions.canEdit && (
+                {!approved && (
                   <button onClick={() => redact(f.text)} className="rounded-md border border-caution-300/60 bg-white px-2 py-0.5 text-xs font-medium text-caution-700 hover:bg-caution-50">Redact</button>
                 )}
               </div>
@@ -79,7 +79,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
             {TIERS.map((tr) => {
               const active = tier === tr.value;
               return (
-                <button key={tr.value} type="button" disabled={approved || !permissions.canEdit} onClick={() => setTier(tr.value)} className={`rounded-xl border p-3 text-left transition-colors disabled:opacity-60 ${active ? "border-accent-400 bg-accent-50/60 ring-1 ring-accent-200" : "border-zinc-200 hover:bg-zinc-50"}`}>
+                <button key={tr.value} type="button" disabled={approved} onClick={() => setTier(tr.value)} className={`rounded-xl border p-3 text-left transition-colors disabled:opacity-60 ${active ? "border-accent-400 bg-accent-50/60 ring-1 ring-accent-200" : "border-zinc-200 hover:bg-zinc-50"}`}>
                   <p className="text-sm font-semibold text-zinc-900">{tr.label}</p>
                   <p className="mt-0.5 text-xs text-zinc-500">{tr.blurb}</p>
                 </button>
@@ -93,7 +93,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
       <Card>
         <CardHeader><CardTitle>Neutral description</CardTitle>{!approved && <span className="text-xs text-zinc-400">Draft · editable</span>}</CardHeader>
         <CardBody className="space-y-4">
-          <textarea value={text} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={6} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
+          <textarea value={text} onChange={(e) => setText(e.target.value)} readOnly={approved} rows={6} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
 
           {approved ? (
             <>
@@ -115,11 +115,9 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
                 {permissions.canReject && !rejecting && (
                   <button onClick={() => setRejecting(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3.5 text-[13px] text-critical-600 hover:bg-critical-50"><XCircle className="h-3.5 w-3.5" /> Reject</button>
                 )}
-                {permissions.canEdit && (
-                  <button onClick={() => run("save", () => updateVisual(task.id, text, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
-                )}
+                <button onClick={() => run("save", () => updateVisual(task.id, text, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
                 {permissions.canApprove ? (
-                  <button onClick={() => run("approve", () => approveVisual(task.id, text, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve for use</button>
+                  <button onClick={() => run("approve", () => approveVisual(task.id))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve for use</button>
                 ) : (<span className="text-xs text-zinc-400">A teacher or QTVI must approve this.</span>)}
               </div>
             </>
