@@ -39,9 +39,14 @@ Copy `.env.example` to `.env` and adjust. Missing keys never crash the app — a
 | `BRAILLE_OCR_PROVIDER` | `mock` | `mock` \| `openai_vision_draft` \| `external_braille_ocr`. |
 | `BRAILLE_OCR_ENDPOINT` | _(empty)_ | HTTPS endpoint for the external Braille OCR adapter. |
 | `BRAILLE_OCR_API_KEY` | _(empty)_ | Server-only bearer token for that endpoint. |
-| `MAX_UPLOAD_MB` | `10` | Upload size cap enforced in preprocessing. |
-| `ALLOWED_UPLOAD_TYPES` | `image/png,image/jpeg,image/jpg,application/pdf` | Accepted upload MIME types. |
-| `ALLOW_REAL_PUPIL_DATA` | `false` | Safety flag; keep `false` for demos/pilots. |
+| `BRAILLE_OCR_TIMEOUT_MS` | `30000` | Request timeout for the external Braille OCR endpoint. |
+| `LIBLOUIS_ENABLED` | `false` | Enable the optional Liblouis back-translation CLI. Off by default. |
+| `LIBLOUIS_COMMAND` | _(empty)_ | Path to a `lou_translate`-style CLI (only used when enabled). |
+| `LIBLOUIS_TABLE` | `en-ueb-g2.ctb` | Liblouis translation table. |
+| `LIBLOUIS_TIMEOUT_MS` | `5000` | Timeout for the Liblouis CLI call. |
+| `MAX_UPLOAD_MB` | `10` | Upload size cap enforced centrally in preprocessing/validation. |
+| `ALLOWED_UPLOAD_TYPES` | `image/png,image/jpeg,image/jpg,application/pdf` | Accepted upload MIME types (includes `image/jpg`). |
+| `ALLOW_REAL_PUPIL_DATA` | `false` | Safety flag; keep `false` for demos/pilots. When `false`, a pupil-linked task run through a real provider raises a high-severity warning. |
 
 ### Run in mock mode (default, no keys)
 
@@ -108,11 +113,46 @@ A missing endpoint returns a `provider_unavailable` draft; a failed call returns
 
 ### Liblouis-ready back-translation
 
-`braille-translation-provider.ts` defines a clean `BrailleTranslationProvider` interface for converting detected Braille (Unicode dot patterns or cell arrays) **into** print text. This is back-translation that runs **after** a dot/cell-detection OCR stage — it is **not** an image OCR engine and cannot read a photograph on its own. Liblouis is intentionally optional: the shipped stub reports `provider_unavailable`, so the build never depends on a native Liblouis binding or on Duxbury. Swap the stub for a real Liblouis CLI/binding without changing any caller.
+`braille-translation-provider.ts` defines a clean `BrailleTranslationProvider` interface for converting detected Braille (Unicode dot patterns or cell arrays) **into** print text. This is back-translation that runs **after** a dot/cell-detection OCR stage — it is **not** an image OCR engine and cannot read a photograph on its own.
+
+Liblouis is intentionally optional and controlled by env:
+
+* `LIBLOUIS_ENABLED=false` (default) — the provider reports `provider_unavailable`; the build never depends on a native Liblouis binding or on Duxbury.
+* `LIBLOUIS_ENABLED=true` with `LIBLOUIS_COMMAND` pointing at a `lou_translate`-style CLI — the provider shells out (with `LIBLOUIS_TIMEOUT_MS`) to back-translate, feeding the Braille on stdin against `LIBLOUIS_TABLE`. A missing or slow binary degrades gracefully and never crashes the app.
+
+When the external Braille OCR adapter returns raw Braille, it optionally invokes this provider and records whether Liblouis was available (it never overrides the engine's own draft text). Liblouis is **never** required for `npm install`, `npm run typecheck`, or `npm run build`. Duxbury is not used.
+
+### Real pupil data safety
+
+Identifiable pupil data must never be sent to a real provider without school data-protection approval. Two protections enforce this:
+
+* **Minimal context only.** AI calls receive title, subject, year group, question prompt, assessed skill, and the image — **never** pupil names or identifiers. The provider input carries only a boolean `hasLinkedPupil`.
+* **Explicit guard.** `assertRealAiDataAllowed` (in `src/lib/ai/safety.ts`) raises a high-severity warning flag when `AI_MODE=real` and a pupil-linked task runs while `ALLOW_REAL_PUPIL_DATA=false`. It warns and audits rather than silently proceeding; it does not block the demo workflow.
+
+### Re-running AI/OCR
+
+Every module exposes an explicit **Re-run AI/OCR** control and a server action (`rerunBrailleTranscription`, `rerunVisualDescription`, `rerunStemDescription`). Re-runs reuse the stored upload, refresh provider/model/confidence/prompt/flag metadata, preserve approval locks (a specialist-verified transcription or an approved description cannot be re-run unless an admin reopens it), and record the previous draft in the audit reason so a regeneration never silently discards edits. Assessment tasks can also edit the question prompt / assessed skill / context / hint tier after creation and regenerate so answer-sensitivity is re-evaluated.
+
+### Upload validation
+
+All upload validation is centralised in `src/lib/ai/config.ts` (`validateUpload` / `getUploadLimits`) and shared by every module via `src/lib/upload-guard.ts`. Accepted types and the size cap are driven by `ALLOWED_UPLOAD_TYPES` and `MAX_UPLOAD_MB`; oversized or unsupported files are rejected before any provider call.
+
+### Audit provenance
+
+`ai.*` and `eval.run` audit entries record provider, model, confidence, processing time, AI mode, **prompt version**, and a concise **flag summary** (e.g. `high: requires_specialist_review`). Raw provider responses, base64 image data, API keys, and prompt payloads are never stored in audit entries or task records. Full uncertainty flags (severity + category) are preserved on task/eval records in an `aiFlags` field for review and analytics.
 
 ### Quality evaluation
 
-The evaluation harness (`/quality`) scores the active engine with CER/WER. Samples **with** an image are sent through `transcribeBraille` (respecting `AI_MODE` and the configured Braille provider) and record provider/model/confidence/flags. Text-only samples fall back to deterministic mock simulation and are labelled `mock` so they are never mistaken for a real OCR measurement. Every staff verification also captures an (AI draft → verified final) correction pair — free labelled data for measuring and later fine-tuning a real engine.
+The evaluation harness (`/quality`) scores the active engine with CER/WER. Samples **with** an image are sent through `transcribeBraille` (respecting `AI_MODE` and the configured Braille provider) and record provider/model/confidence/flags. Text-only samples fall back to deterministic mock simulation and are labelled `mock` so they are never mistaken for a real OCR measurement. Samples carry governance metadata (subject, year group, Braille type, image quality, sample source, permission status), and the page shows aggregate metrics (average CER/WER/confidence, counts by provider and Braille type, most common flag categories) plus a data-protection warning: **evaluation samples must be synthetic or anonymised unless school permission and data-protection approval are confirmed**. Every staff verification also captures an (AI draft → verified final) correction pair — free labelled data for measuring and later fine-tuning a real engine.
+
+### Validation commands
+
+```bash
+npm run validate:ai     # AI/OCR behavioural guarantees (provider routing, fallbacks, caps, safety)
+npm run validate:mvp    # workflow/RBAC + AI/OCR presence & no-old-mock-calls checks
+npm run typecheck
+npm run build
+```
 
 Local persistence:
 

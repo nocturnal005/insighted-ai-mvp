@@ -5,9 +5,20 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { db, id, recordAudit } from "@/lib/store";
-import { transcribeBraille, simulateOcrMock, summariseFlags, getAiConfig } from "@/lib/ai";
+import { transcribeBraille, simulateOcrMock, summariseFlags, toStoredFlags, getAiConfig } from "@/lib/ai";
+import { assertValidUpload } from "@/lib/upload-guard";
 import { scorePair } from "@/lib/metrics";
 import type { EvalSample } from "@/lib/types";
+
+type BrailleType = EvalSample["brailleType"];
+type ImageQuality = EvalSample["imageQuality"];
+type SampleSource = EvalSample["sampleSource"];
+type PermissionStatus = EvalSample["permissionStatus"];
+
+function pick<T extends string>(raw: FormDataEntryValue | null, allowed: readonly T[], fallback: T): T {
+  const v = String(raw ?? "");
+  return (allowed as readonly string[]).includes(v) ? (v as T) : fallback;
+}
 
 /** Add a held-out ground-truth sample (image optional, correct transcription required). */
 export async function addEvalSample(formData: FormData) {
@@ -21,6 +32,7 @@ export async function addEvalSample(formData: FormData) {
 
   let imageDataUrl: string | null = null;
   if (file && file.size > 0) {
+    assertValidUpload(file);
     const buf = Buffer.from(await file.arrayBuffer());
     imageDataUrl = `data:${file.type};base64,${buf.toString("base64")}`;
   }
@@ -36,6 +48,12 @@ export async function addEvalSample(formData: FormData) {
     lastRunAt: null,
     createdByName: user.fullName,
     createdAt: new Date().toISOString(),
+    subject: String(formData.get("subject") || "").trim() || null,
+    yearGroup: String(formData.get("yearGroup") || "").trim() || null,
+    brailleType: pick<NonNullable<BrailleType>>(formData.get("brailleType"), ["ueb_grade_1", "ueb_grade_2", "unknown"], "unknown"),
+    imageQuality: pick<NonNullable<ImageQuality>>(formData.get("imageQuality"), ["good", "medium", "poor", "unknown"], "unknown"),
+    sampleSource: pick<NonNullable<SampleSource>>(formData.get("sampleSource"), ["synthetic", "anonymised_school_sample", "other"], "synthetic"),
+    permissionStatus: pick<NonNullable<PermissionStatus>>(formData.get("permissionStatus"), ["synthetic", "anonymised_only", "approved_for_testing", "not_approved"], "synthetic"),
   };
   db.evalSamples.unshift(sample);
   recordAudit({ actorId: user.id, actorName: user.fullName, action: "eval.sample", objectType: "Eval sample", objectLabel: label });
@@ -56,6 +74,8 @@ export async function runEvaluation() {
   if (!can(user.role, "audit.read")) throw new Error("Not permitted");
 
   const now = new Date().toISOString();
+  let promptVersion: string | null = null;
+  const aggregateFlags: string[] = [];
   for (const sample of db.evalSamples) {
     let prediction: string;
     let provider: string;
@@ -77,6 +97,9 @@ export async function runEvaluation() {
       confidence = r.confidence;
       aiMode = r.meta.mode;
       flagSummary = summariseFlags(r.flags);
+      promptVersion = r.meta.promptVersion;
+      sample.aiFlags = toStoredFlags(r.flags);
+      aggregateFlags.push(...flagSummary);
     } else {
       // No source image — use mock simulation and label it clearly.
       prediction = simulateOcrMock(sample.groundTruthText);
@@ -85,6 +108,7 @@ export async function runEvaluation() {
       confidence = null;
       aiMode = "mock";
       flagSummary = ["simulated: no source image — mock OCR used"];
+      sample.aiFlags = null;
     }
 
     const s = scorePair(prediction, sample.groundTruthText);
@@ -100,6 +124,8 @@ export async function runEvaluation() {
   }
 
   const config = getAiConfig();
+  // De-duplicate the aggregate flag summary for a concise, secret-free audit record.
+  const flagSummary = Array.from(new Set(aggregateFlags)).slice(0, 8);
   recordAudit({
     actorId: user.id,
     actorName: user.fullName,
@@ -109,6 +135,8 @@ export async function runEvaluation() {
     objectLabel: `${db.evalSamples.length} sample(s)`,
     aiMode: config.mode,
     provider: config.mode === "mock" ? "mock" : config.brailleOcrProvider,
+    promptVersion,
+    flagSummary: flagSummary.length ? flagSummary : null,
   });
 
   revalidatePath("/quality");

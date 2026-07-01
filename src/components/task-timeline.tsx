@@ -17,6 +17,7 @@ const ACTION_LABEL: Record<string, string> = {
   "feedback.approve": "Teacher feedback approved",
   "visual.draft": "Visual description drafted",
   "visual.edit": "Visual description edited",
+  "visual.context.edit": "Assessment context updated",
   "visual.approve": "Visual description approved",
   "stem.draft": "STEM description drafted",
   "stem.restyle": "STEM draft restyled",
@@ -63,7 +64,11 @@ export function TaskTimeline({ entries }: { entries: AuditEntry[] }) {
                       {entry.model ? `/${entry.model}` : ""}
                       {entry.confidence != null ? ` · ${Math.round(entry.confidence * 100)}% conf` : ""}
                       {entry.processingMs != null ? ` · ${entry.processingMs}ms` : ""}
+                      {entry.promptVersion ? ` · ${entry.promptVersion}` : ""}
                     </p>
+                  )}
+                  {entry.flagSummary && entry.flagSummary.length > 0 && (
+                    <p className="mt-0.5 text-[11px] text-zinc-400">Flags: {entry.flagSummary.join(", ")}</p>
                   )}
                 </div>
                 <span className="shrink-0 text-xs text-zinc-400">{formatRelative(entry.createdAt)}</span>

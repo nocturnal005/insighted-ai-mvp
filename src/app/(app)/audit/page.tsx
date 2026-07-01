@@ -21,6 +21,7 @@ const ACTION_LABEL: Record<string, string> = {
   "feedback.approve": "approved feedback for",
   "visual.draft": "drafted a description for",
   "visual.edit": "edited",
+  "visual.context.edit": "updated assessment context for",
   "visual.approve": "approved",
   "stem.draft": "drafted a STEM description for",
   "stem.restyle": "restyled",
@@ -75,6 +76,8 @@ export default function AuditPage() {
                     {e.previousStatus && e.newStatus ? ` - ${e.previousStatus} to ${e.newStatus}` : ""}
                     {e.reason ? ` - ${e.reason}` : ""}
                     {e.provider ? ` - ${e.aiMode ?? "?"}/${e.provider}${e.model ? `/${e.model}` : ""}${e.confidence != null ? ` ${Math.round(e.confidence * 100)}%` : ""}` : ""}
+                    {e.promptVersion ? ` · ${e.promptVersion}` : ""}
+                    {e.flagSummary && e.flagSummary.length > 0 ? ` · flags: ${e.flagSummary.join(", ")}` : ""}
                   </p>
                 </div>
                 <span className="shrink-0 text-xs text-zinc-400">{formatRelative(e.createdAt)}</span>

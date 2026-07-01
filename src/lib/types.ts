@@ -51,6 +51,18 @@ export interface LowConfidenceRegion {
   reason: string;
 }
 
+/**
+ * A full AI uncertainty flag, preserved on the task record so severity/category detail is
+ * available for audit, quality review, and future analytics — even though the workflow UI
+ * also renders a simpler flag shape. Never contains secrets or raw provider payloads.
+ */
+export interface StoredAiFlag {
+  text: string;
+  reason: string;
+  category: string;
+  severity: "low" | "medium" | "high";
+}
+
 export interface Transcription {
   draftText: string;
   editedText: string;
@@ -73,6 +85,10 @@ export interface Transcription {
   aiMode?: "mock" | "real" | null;
   promptVersion?: string | null;
   processingMs?: number | null;
+  // Full AI uncertainty flags (preserves severity/category the simple UI shape loses).
+  aiFlags?: StoredAiFlag[] | null;
+  // Opaque request id returned by an external OCR provider (only if it supplies one).
+  aiRequestId?: string | null;
 }
 
 export interface FeedbackFindings {
@@ -163,6 +179,7 @@ export interface VisualDescriptionTask {
   confidence?: number | null;
   promptVersion?: string | null;
   processingMs?: number | null;
+  aiFlags?: StoredAiFlag[] | null;
 }
 
 export interface StemTask {
@@ -193,6 +210,7 @@ export interface StemTask {
   confidence?: number | null;
   promptVersion?: string | null;
   processingMs?: number | null;
+  aiFlags?: StoredAiFlag[] | null;
 }
 
 export interface Upload {
@@ -248,6 +266,14 @@ export interface EvalSample {
   confidence?: number | null;
   aiMode?: "mock" | "real" | null;
   flagSummary?: string[] | null;
+  aiFlags?: StoredAiFlag[] | null;
+  // Dataset provenance / governance metadata (all optional for seed compatibility).
+  subject?: string | null;
+  yearGroup?: string | null;
+  brailleType?: "ueb_grade_1" | "ueb_grade_2" | "unknown" | null;
+  imageQuality?: "good" | "medium" | "poor" | "unknown" | null;
+  sampleSource?: "synthetic" | "anonymised_school_sample" | "other" | null;
+  permissionStatus?: "synthetic" | "anonymised_only" | "approved_for_testing" | "not_approved" | null;
 }
 
 export interface AuditEntry {
@@ -270,4 +296,7 @@ export interface AuditEntry {
   confidence?: number | null;
   processingMs?: number | null;
   aiMode?: "mock" | "real" | null;
+  promptVersion?: string | null;
+  // Concise per-run flag summary, e.g. ["high: requires_specialist_review"]. Never raw text.
+  flagSummary?: string[] | null;
 }

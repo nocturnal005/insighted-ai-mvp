@@ -6,7 +6,47 @@
  * assessment-context task is missing the prompt/skill needed to reason about answer leaks.
  */
 import type { UncertaintyFlag, VisualContext } from "./types";
-import { assessmentContextMissingFlag } from "./uncertainty";
+import { assessmentContextMissingFlag, makeFlag } from "./uncertainty";
+
+/** Hard cap so a malformed provider flag can never flood the UI/audit. */
+const MAX_FLAG_TEXT = 300;
+
+/** Trim overlong provider-supplied text so it cannot flood the UI or audit. */
+export function truncateText(value: string, max: number = MAX_FLAG_TEXT): string {
+  const s = value.trim();
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+/**
+ * Real-pupil-data safety guard. When the app is in real mode and a task is linked to a
+ * pupil while `ALLOW_REAL_PUPIL_DATA` is false, returns a high-severity warning flag. It
+ * does NOT block the workflow (so demos keep working) but makes the risk explicit and
+ * auditable. Identifiable pupil context is never sent to a real provider regardless.
+ */
+export function assertRealAiDataAllowed(params: {
+  aiMode: "mock" | "real";
+  allowRealPupilData: boolean;
+  hasLinkedPupil?: boolean;
+  objectLabel?: string;
+}): UncertaintyFlag[] {
+  if (params.aiMode !== "real" || !params.hasLinkedPupil || params.allowRealPupilData) {
+    return [];
+  }
+  return [
+    makeFlag({
+      text: "Pupil-linked task sent to a real provider",
+      reason:
+        "This task is linked to a pupil and AI_MODE is real while ALLOW_REAL_PUPIL_DATA is false. " +
+        "Only non-identifying context (title, subject, year group, prompt, assessed skill, image) is sent — " +
+        "never pupil names or identifiers. Identifiable pupil data must not be sent to real providers " +
+        "without school data-protection approval.",
+      category: "requires_specialist_review",
+      severity: "high",
+      suggestedAction:
+        "Use mock mode for pupil-linked work, or obtain data-protection approval and set ALLOW_REAL_PUPIL_DATA=true.",
+    }),
+  ];
+}
 
 const ASSESSMENT_CONTEXTS: VisualContext[] = [
   "class_test",

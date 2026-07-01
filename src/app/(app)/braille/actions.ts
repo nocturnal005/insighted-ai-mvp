@@ -6,17 +6,10 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { db, id, recordAudit, createUpload, recordCorrection, uploadDataUrl } from "@/lib/store";
 import { getBrailleTask, getTaskUpload, getPupil } from "@/lib/data";
-import { transcribeBraille, mapFlagsToLowConfidenceRegions } from "@/lib/ai";
+import { transcribeBraille, mapFlagsToLowConfidenceRegions, summariseFlags, toStoredFlags } from "@/lib/ai";
+import { assertValidUpload } from "@/lib/upload-guard";
 import { generateFeedback } from "@/lib/feedback";
 import type { BrailleTask } from "@/lib/types";
-
-const ALLOWED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "application/pdf"]);
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-
-function assertValidUpload(file: File): void {
-  if (!ALLOWED_UPLOAD_TYPES.has(file.type)) throw new Error("Upload must be PNG, JPG, JPEG, or PDF");
-  if (file.size > MAX_UPLOAD_BYTES) throw new Error("Upload must be 10MB or smaller");
-}
 
 export async function createBrailleTask(formData: FormData) {
   const user = requireUser();
@@ -75,11 +68,17 @@ export async function createBrailleTask(formData: FormData) {
   redirect(`/braille/${task.id}`);
 }
 
-export async function runTranscription(taskId: string) {
-  const user = requireUser();
-  const task = getBrailleTask(taskId);
-  if (!task) throw new Error("Task not found");
-
+/**
+ * Shared OCR execution: feeds the uploaded image into the AI/OCR service, stores the draft
+ * (including full AI flags + provenance), and audits an `ai.braille_ocr.run`. Used by both
+ * the first run and an explicit re-run. `reason` records why a re-run happened (and can
+ * carry the previous draft so a regeneration never silently discards edits).
+ */
+async function executeTranscription(
+  user: ReturnType<typeof requireUser>,
+  task: BrailleTask,
+  reason?: string,
+) {
   const previousStatus = task.status;
 
   // Feed the uploaded image (as a data URL) into the AI/OCR service — never just the title.
@@ -95,6 +94,7 @@ export async function runTranscription(taskId: string) {
     dataUrl: dataUrl || undefined,
     subject: task.subject,
     yearGroup: pupil?.yearGroup ?? null,
+    hasLinkedPupil: Boolean(task.pupilId),
   });
 
   const regions = mapFlagsToLowConfidenceRegions(result.flags);
@@ -119,6 +119,8 @@ export async function runTranscription(taskId: string) {
     aiMode: result.meta.mode,
     promptVersion: result.meta.promptVersion,
     processingMs: result.meta.processingMs,
+    aiFlags: toStoredFlags(result.flags),
+    aiRequestId: result.providerRequestId ?? null,
   };
   task.status = "needs_specialist_review";
   task.updatedAt = new Date().toISOString();
@@ -137,8 +139,39 @@ export async function runTranscription(taskId: string) {
     confidence: result.confidence,
     processingMs: result.meta.processingMs,
     aiMode: result.meta.mode,
+    promptVersion: result.meta.promptVersion,
+    flagSummary: summariseFlags(result.flags),
+    reason: reason ?? null,
   });
-  revalidatePath(`/braille/${taskId}`);
+  revalidatePath(`/braille/${task.id}`);
+}
+
+export async function runTranscription(taskId: string) {
+  const user = requireUser();
+  const task = getBrailleTask(taskId);
+  if (!task) throw new Error("Task not found");
+  await executeTranscription(user, task);
+}
+
+/**
+ * Explicitly re-run Braille OCR (e.g. after replacing the upload). Blocked once the
+ * transcription is specialist-verified unless an Admin reopens it, so verified work is
+ * never silently overwritten. The previous draft is preserved in the audit reason.
+ */
+export async function rerunBrailleTranscription(taskId: string) {
+  const user = requireUser();
+  const task = getBrailleTask(taskId);
+  if (!task) throw new Error("Task not found");
+  if (task.status === "rejected" || task.status === "archived") throw new Error("Task is closed");
+
+  const locked = task.transcription?.status === "specialist_verified";
+  if (locked && user.role !== "admin") {
+    throw new Error("Transcription is specialist-verified and locked. An admin must reopen it to re-run.");
+  }
+
+  const prior = task.transcription?.editedText?.trim();
+  const reason = prior ? `Re-ran OCR; previous draft preserved: "${prior.slice(0, 140)}"` : "Re-ran OCR";
+  await executeTranscription(user, task, reason);
 }
 
 export async function saveTranscription(taskId: string, editedText: string) {
