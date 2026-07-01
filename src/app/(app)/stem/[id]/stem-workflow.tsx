@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Loader2, Lock, CheckCircle2, ListChecks, ShieldAlert, EyeOff } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExportMenu } from "@/components/export-menu";
+import { AiMeta } from "@/components/ai-meta";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import type { DescriptionStyle, StemTask } from "@/lib/types";
 import { restyleStem, updateStem, approveStem } from "../actions";
@@ -77,6 +78,10 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
       <Card>
         <CardHeader><CardTitle>Structured description</CardTitle>{!approved && <span className="text-xs text-zinc-400">Draft · editable</span>}</CardHeader>
         <CardBody className="space-y-4">
+          <AiMeta mode={task.aiMode} provider={task.aiProvider} model={task.aiModel} confidence={task.confidence} promptVersion={task.promptVersion} />
+          {!approved && (
+            <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><span>This is an AI draft. Check the structure and remove anything that reveals the answer before approving.</span></div>
+          )}
           <textarea value={text || task.editedDescription} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={9} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
 
           {approved ? (

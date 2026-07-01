@@ -10,6 +10,9 @@ import { formatRelative, initials } from "@/lib/utils";
 const ACTION_LABEL: Record<string, string> = {
   "task.create": "created a task",
   "upload.create": "uploaded a file",
+  "ai.braille_ocr.run": "ran AI/OCR Braille draft on",
+  "ai.visual_description.run": "ran AI visual description on",
+  "ai.stem_description.run": "ran AI STEM description on",
   "transcription.draft": "ran transcription on",
   "transcription.edit": "edited",
   "transcription.specialist_verify": "specialist verified",
@@ -31,6 +34,7 @@ const ACTION_LABEL: Record<string, string> = {
   "user.role_change": "changed the role of",
   "settings.retention": "updated retention",
   "eval.sample": "added an evaluation sample",
+  "eval.sample.delete": "deleted an evaluation sample",
   "eval.run": "ran an evaluation",
 };
 
@@ -70,6 +74,7 @@ export default function AuditPage() {
                     {e.objectType}
                     {e.previousStatus && e.newStatus ? ` - ${e.previousStatus} to ${e.newStatus}` : ""}
                     {e.reason ? ` - ${e.reason}` : ""}
+                    {e.provider ? ` - ${e.aiMode ?? "?"}/${e.provider}${e.model ? `/${e.model}` : ""}${e.confidence != null ? ` ${Math.round(e.confidence * 100)}%` : ""}` : ""}
                   </p>
                 </div>
                 <span className="shrink-0 text-xs text-zinc-400">{formatRelative(e.createdAt)}</span>

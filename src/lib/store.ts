@@ -262,6 +262,12 @@ export function recordAudit(entry: {
   previousStatus?: string | null;
   newStatus?: string | null;
   reason?: string | null;
+  // AI/OCR run provenance for `ai.*` / `eval.*` actions.
+  provider?: string | null;
+  model?: string | null;
+  confidence?: number | null;
+  processingMs?: number | null;
+  aiMode?: AuditEntry["aiMode"];
 }): void {
   db.audit.unshift({ id: id("a"), organisationId: ORG, createdAt: new Date().toISOString(), ...entry });
   saveDb();

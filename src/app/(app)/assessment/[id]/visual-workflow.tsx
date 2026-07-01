@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Loader2, Lock, ShieldAlert, CheckCircle2, EyeOff, XCircle, Ban } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExportMenu } from "@/components/export-menu";
+import { AiMeta } from "@/components/ai-meta";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import type { HintTier, VisualDescriptionTask } from "@/lib/types";
 import { updateVisual, approveVisual, rejectVisual } from "../actions";
@@ -93,6 +94,10 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
       <Card>
         <CardHeader><CardTitle>Neutral description</CardTitle>{!approved && <span className="text-xs text-zinc-400">Draft · editable</span>}</CardHeader>
         <CardBody className="space-y-4">
+          <AiMeta mode={task.aiMode} provider={task.aiProvider} model={task.aiModel} confidence={task.confidence} promptVersion={task.promptVersion} />
+          {!approved && (
+            <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><span>Check that the description gives access to the visual without revealing what the learner is being assessed on.</span></div>
+          )}
           <textarea value={text} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={6} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
 
           {approved ? (

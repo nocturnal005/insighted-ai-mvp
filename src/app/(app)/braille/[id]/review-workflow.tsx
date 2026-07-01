@@ -8,6 +8,7 @@ import {
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { TranscriptionBadge } from "@/components/ui/badge";
 import { ExportMenu } from "@/components/export-menu";
+import { AiMeta } from "@/components/ai-meta";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import type { BrailleTask } from "@/lib/types";
 import {
@@ -112,8 +113,9 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
             <div className="flex items-center gap-3"><span className="text-xs text-zinc-400">Confidence {Math.round(t.confidence * 100)}%</span><TranscriptionBadge status={t.status} /></div>
           </CardHeader>
           <CardBody className="space-y-4">
+            <AiMeta mode={t.aiMode} provider={t.aiProvider} model={t.aiModel} confidence={t.confidence} promptVersion={t.promptVersion} />
             {!verified && (
-              <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>This is an unverified AI draft. Review the flagged areas and correct any errors before verifying.</span></div>
+              <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>This is an AI/OCR draft. It must be checked by a QTVI or Braille-literate specialist before teacher feedback or export.</span></div>
             )}
             {!verified && t.lowConfidenceRegions.length > 0 && (
               <div className="flex flex-wrap gap-2">{t.lowConfidenceRegions.map((r, i) => (<span key={i} title={r.reason} className="inline-flex items-center gap-1.5 rounded-lg border border-caution-200/60 bg-caution-50 px-2.5 py-1 text-xs text-caution-700"><span className="font-medium">“{r.text}”</span><span className="text-caution-600/70">{r.reason}</span></span>))}</div>
@@ -165,6 +167,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
               </div>
             ) : (
               <div className="space-y-4">
+                <div className="flex items-start gap-2.5 rounded-xl bg-accent-50/60 px-3.5 py-3 text-sm text-accent-700"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><span>This feedback is based on the specialist-verified English transcription. It does not verify Braille accuracy.</span></div>
                 <p className="text-sm text-zinc-700">{fb.summary}</p>
                 <Findings title="Specialist transcription notes" items={[fb.specialistNotes].filter(Boolean)} />
                 <Findings title="Specialist review items" items={[...fb.findings.contractions, ...fb.findings.formatting, ...fb.findings.unclear]} />
