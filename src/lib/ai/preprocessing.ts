@@ -6,8 +6,16 @@
  * is defensive — any failure returns the ORIGINAL data URL plus a high-severity warning
  * rather than throwing, so a bad image can never crash a server action. PDFs are stored
  * and flagged as pending because raster OCR of PDFs is not wired in this build.
+ *
+ * Sharp is optional: if the native binary is unavailable (e.g. Vercel build environment),
+ * image normalisation is skipped and the original data URL is returned with a warning.
  */
-import sharp from "sharp";
+let sharpModule: any = null;
+try {
+  sharpModule = require("sharp");
+} catch {
+  // Native sharp binary not available; preprocessing will skip normalisation.
+}
 import type { UncertaintyFlag } from "./types";
 import { validateUpload } from "./config";
 import { makeFlag, pdfPendingFlag } from "./uncertainty";
@@ -89,6 +97,19 @@ export async function preprocessImage(input: PreprocessInput): Promise<Preproces
     return { processedDataUrl: input.dataUrl, warnings };
   }
 
+  // If sharp is not available (e.g., missing native deps in serverless), skip normalisation.
+  if (!sharpModule) {
+    warnings.push(
+      makeFlag({
+        text: "Image normalisation skipped",
+        reason: "The image processing library is not available in this environment; the original image is passed through unchanged.",
+        category: "low_image_quality",
+        severity: "medium",
+      }),
+    );
+    return { processedDataUrl: input.dataUrl, warnings };
+  }
+
   const parsed = parseDataUrl(input.dataUrl);
   if (!parsed) {
     warnings.push(
@@ -103,7 +124,7 @@ export async function preprocessImage(input: PreprocessInput): Promise<Preproces
   }
 
   try {
-    const pipeline = sharp(parsed.buffer, { failOn: "none" }).rotate(); // EXIF auto-rotate
+    const pipeline = sharpModule(parsed.buffer, { failOn: "none" }).rotate(); // EXIF auto-rotate
     const meta = await pipeline.metadata();
 
     if (meta.width && meta.width > MAX_WIDTH) {
