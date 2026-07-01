@@ -2,10 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
-import { getVisualTask, getTaskUpload } from "@/lib/data";
-import { pupilLabel, userName } from "@/lib/store";
+import { getVisualTask, getTaskAudit, getTaskUpload } from "@/lib/data";
+import { pupilLabel, uploadDataUrl, userName } from "@/lib/store";
 import { can } from "@/lib/rbac";
 import { TaskBadge } from "@/components/ui/badge";
+import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
 import { VisualWorkflow } from "./visual-workflow";
 
@@ -15,8 +16,9 @@ export default function VisualDetailPage({ params }: { params: { id: string } })
   if (!task) notFound();
 
   const up = getTaskUpload(task.id);
+  const timeline = getTaskAudit(task.id);
   const upload = up
-    ? { dataUrl: up.dataUrl, fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
+    ? { dataUrl: uploadDataUrl(up), fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
     : null;
 
   return (
@@ -40,10 +42,14 @@ export default function VisualDetailPage({ params }: { params: { id: string } })
         upload={upload}
         permissions={{
           canApprove: can(user.role, "visual.approve"),
+          canEdit: can(user.role, "description.edit"),
           canReject: can(user.role, "task.reject"),
           canExport: can(user.role, "export"),
         }}
       />
+      <div className="mt-5">
+        <TaskTimeline entries={timeline} />
+      </div>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
-import { db, recordAudit } from "@/lib/store";
+import { db, purgeExpiredUploads, recordAudit } from "@/lib/store";
 import type { UserRole } from "@/lib/types";
 
 export async function setUserRole(formData: FormData) {
@@ -30,4 +30,22 @@ export async function setRetention(formData: FormData) {
     recordAudit({ actorId: actor.id, actorName: actor.fullName, action: "settings.retention", objectType: "Organisation", objectLabel: `Retention ${db.settings.retentionDays} days` });
   }
   revalidatePath("/admin");
+}
+
+export async function secureDeleteExpiredMaterial() {
+  const actor = requireUser();
+  if (!can(actor.role, "org.manage")) throw new Error("Not permitted");
+
+  const deleted = purgeExpiredUploads(db.settings.retentionDays);
+  recordAudit({
+    actorId: actor.id,
+    actorName: actor.fullName,
+    actorRole: actor.role,
+    action: "data.delete",
+    objectType: "Upload",
+    objectLabel: `${deleted.length} expired upload(s)`,
+    reason: `Retention ${db.settings.retentionDays} days`,
+  });
+  revalidatePath("/admin");
+  revalidatePath("/audit");
 }

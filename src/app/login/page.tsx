@@ -1,5 +1,5 @@
 import { ShieldCheck, ArrowRight } from "lucide-react";
-import { demoUsers } from "@/lib/session";
+import { DEMO_MODE, demoUsers } from "@/lib/session";
 import { ROLE_LABELS, ROLE_BLURB } from "@/lib/rbac";
 import { initials } from "@/lib/utils";
 import { signInAs } from "./actions";
@@ -9,6 +9,19 @@ import { signInAs } from "./actions";
  * a TA can upload and edit; only a Teacher/QTVI can verify and approve.
  */
 export default function LoginPage() {
+  if (!DEMO_MODE) {
+    return (
+      <main id="main" className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-card">
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Authentication required</h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            Demo staff picker is disabled. Connect Supabase Auth or your school identity provider through getCurrentUser().
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   const users = demoUsers();
 
   return (
@@ -25,7 +38,7 @@ export default function LoginPage() {
         </div>
 
         <div className="rounded-2xl border border-zinc-200/80 bg-white p-2 shadow-card">
-          <p className="px-3 pb-2 pt-3 eyebrow">Choose a staff account to continue</p>
+          <p className="px-3 pb-2 pt-3 eyebrow">Demo mode - choose a staff account</p>
           <ul className="space-y-1">
             {users.map((u) => (
               <li key={u.id}>

@@ -63,6 +63,9 @@ export function getQualityStats(): QualityStats {
 export function getAudit() {
   return db.audit;
 }
+export function getTaskAudit(taskId: string) {
+  return db.audit.filter((entry) => entry.taskId === taskId);
+}
 export function getPupils(): Pupil[] {
   return db.pupils;
 }
@@ -97,8 +100,10 @@ export interface ApprovalItem {
 export function getApprovalQueue(): ApprovalItem[] {
   const items: ApprovalItem[] = [];
   for (const t of db.brailleTasks) {
-    if (t.status === "needs_review") {
-      items.push({ id: t.id, kind: "braille", title: t.title, href: `/braille/${t.id}`, context: "Braille transcription" });
+    if (t.status === "needs_specialist_review") {
+      items.push({ id: t.id, kind: "braille", title: t.title, href: `/braille/${t.id}`, context: "Specialist Braille verification" });
+    } else if (t.status === "teacher_review") {
+      items.push({ id: t.id, kind: "braille", title: t.title, href: `/braille/${t.id}`, context: "Teacher feedback approval" });
     }
   }
   for (const t of db.visualTasks) {

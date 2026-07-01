@@ -9,10 +9,12 @@ import type { User } from "@/lib/types";
  * depends on `getCurrentUser()` returning a User, so nothing else changes.)
  */
 const COOKIE = "insighted_session";
+export const DEMO_MODE = process.env.DEMO_MODE !== "false";
 
 export function setSession(userId: string): void {
   cookies().set(COOKIE, userId, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 8,

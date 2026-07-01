@@ -1,84 +1,114 @@
-# InsightEd AI — MVP
+# InsightEd AI MVP
 
-> Secure, human-verified accessibility workflow for visually impaired (VI) education teams.
+> Secure, human-verified accessibility workflow for visual impairment education teams.
 
-A **runnable, zero-setup** MVP. No database, no API keys, no cloud account — clone, install, run, and click through the full workflow. The data layer is an in-memory store seeded with realistic demo data; it's deliberately isolated behind simple functions so it can be swapped for Postgres/Supabase later without touching the UI.
+InsightEd AI is a controlled-demo and pilot-readiness MVP for mainstream secondary school VI support workflows. It keeps demo resources and mock AI services, but the workflow mechanics are functional: role checks, specialist verification, teacher feedback approval, audit logging, exports, local persistence, upload metadata, and retention deletion.
 
-## Run it
+## Run It
 
 ```bash
 npm install
+npm run reset:demo
 npm run dev
 ```
 
-Open **http://localhost:3000** and pick a staff account to sign in.
+Open http://localhost:3000.
 
-> No `.env` needed. State resets when the server restarts (it's an in-memory demo store).
+`npm run reset:demo` clears local demo records and uploads so the seeded walkthrough data is recreated on the next app start.
 
-## What to try (2-minute tour)
+## MVP Mode
 
-1. **Sign in as _Amelia Stone_ (Teaching Assistant)** — notice she can upload and edit, but the **Verify** and **Approve** buttons are gated. That's role-based access.
-2. Go to **Braille Work Review → New review**, add a title, attach any image (optional), **Create**.
-3. Click **Run transcription** → an AI *draft* appears with a **confidence score** and **low-confidence flags**. Edit the text.
-4. Sign out, **sign in as _David Okafor_ (Teacher)** or _Priya Sharma_ (QTVI)**, reopen the task, and **Mark as verified** → it locks as the staff-approved final, then **Generate feedback**.
-5. Open **Assessment-Safe** — draft a neutral description of a graph, see **answer-sensitive flags** and **hint tiers (0/1/2)**, then **Approve for use** (teacher/QTVI only).
-6. As Priya (QTVI) or Helen (SENCO), open the **Audit Trail** — every action is recorded.
+This MVP is designed for controlled demonstration and validation. It uses human-in-the-loop review for all AI outputs. It must not be used with identifiable pupil data or live assessment material until proper school approval, safeguarding checks, data protection review, and production security arrangements are completed.
+
+Environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DEMO_MODE` | `true` unless set to `false` | Enables the local staff-picker login. Set `DEMO_MODE=false` before wiring Supabase Auth or another identity provider. |
+
+Local persistence:
+
+* Demo records are stored in `.insighted-data/db.json`.
+* Uploaded files are stored in `.insighted-data/uploads`.
+* These folders are ignored by git and intended for controlled demos, not production hosting.
+
+## What To Try
+
+1. Sign in as Amelia Stone. She is a Teaching Assistant and is explicitly marked Braille-literate for the demo, so she can upload, edit, and specialist-verify Braille work.
+2. Create a Braille Work Review, upload a PNG/JPG/PDF, and run transcription.
+3. Review the AI draft, add specialist transcription notes, and specialist-verify the English transcription.
+4. Sign in as David Okafor. He is a subject teacher, so he can generate and approve subject feedback from the specialist-verified English transcription, but he is not the default Braille accuracy verifier.
+5. Create an Assessment-Safe visual task. Add the prompt and what is being assessed, review answer-sensitive risks, select a hint tier, redact as needed, and approve.
+6. Open Audit Trail as Priya, Helen, or Marcus to inspect the recorded actions.
+7. Open Admin and run secure deletion for expired uploaded material.
 
 ## Features
 
 | Area | What it does |
-|---|---|
-| **Auth + RBAC** | 5 roles (TA, Teacher, QTVI, SENCO, Admin); permissions enforced in actions **and** UI |
-| **Dashboard** | Live task stats (active / awaiting / approved / rejected) + recent activity |
-| **Braille Work Review** | Upload → AI draft transcription (confidence + flags) → staff edit → **verify gate** → **editable feedback report** (teacher comments + learner summary) → **approve** → **export** |
-| **Assessment-Safe Visual Support** | Neutral descriptions, **hint tiers (0/1/2)**, answer-sensitive flags, **per-flag redaction**, **approval gate**, export |
-| **STEM Description Support** | Visual-type classification, type-specific structured templates, Descriptive / Instructional / Assessment-safe styles, answer-reveal flags, approve → save to pupil record → export |
-| **Pupil Records** | Anonymised profiles with all linked, approved work across modules |
-| **Approvals** | Cross-module queue of everything awaiting review |
-| **Audit Trail** | Append-only record of every create/edit/verify/approve/reject/export |
-| **OCR Quality** | Auto-captures every (AI draft → verified final) pair as labelled data; evaluation harness scores any engine with **CER/WER** against ground-truth samples |
-| **Admin & Security** | User role management, data-retention setting, secure-deletion (stub), Privacy + DPIA placeholder pages |
-| **Export** | Plain-text download **and** print/Save-as-PDF view, gated so nothing exports until verified/approved |
-| **AI safety** | Nothing is "final" without human verification; AI output always labelled a draft |
+| --- | --- |
+| Auth + RBAC | Demo login with a production-mode off switch; permissions enforced in server actions and UI |
+| Braille Work Review | Upload, AI draft transcription, specialist verification, teacher subject feedback, approval, export |
+| Feedback Reports | Separates specialist transcription notes from subject teacher feedback and learner-facing summary |
+| Assessment-Safe Visual Support | Prompt, assessed skill, hint tiers, answer-sensitive flags, redaction, approval gate, export |
+| STEM Description Support | Structured descriptions by visual type with review and approval |
+| Pupil Records | Anonymised pupil-linked work across modules |
+| Approvals | Cross-module queue for specialist review and teacher approval |
+| Audit Trail | Records create, upload, draft, edit, specialist verify, feedback, approve, export, delete, role, retention events, and per-task timelines |
+| OCR Quality | Captures correction pairs and supports labelled evaluation samples |
+| Admin + Security | Role management, retention setting, local secure deletion, privacy and DPIA placeholders |
+| Export | Plain text download and print/PDF view, gated by approval state |
 
-Task statuses: Draft → Needs review → Approved / **Rejected** (with reason) / **Archived**.
+Core product rule: Braille accuracy verification is separate from subject teacher content feedback.
 
-## Demo accounts
+## Demo Accounts
 
-| Name | Role | Can verify / approve? |
-|---|---|---|
-| Amelia Stone | Teaching Assistant | No (upload + edit + export) |
-| David Okafor | Teacher | Yes |
-| Priya Sharma | QTVI | Yes (+ audit) |
-| Helen Wright | SENCO | No (oversight + audit + export) |
-| Marcus Bell | Admin | Yes (+ user/role management) |
+| Name | Role | Demo responsibility |
+| --- | --- | --- |
+| Amelia Stone | Teaching Assistant | Upload/edit work; Braille-literate specialist verification in demo |
+| David Okafor | Teacher | Subject feedback and teacher approval |
+| Priya Sharma | QTVI | Specialist verification, accessibility approval, audit |
+| Helen Wright | SENCO | Oversight, audit, export, archive |
+| Marcus Bell | Admin | Users, settings, audit, retention/deletion |
 
 ## Tech
 
-Next.js 14 (App Router, TypeScript) · React Server Components + Server Actions · Tailwind CSS · in-memory store. Modern minimalist UI tuned for WCAG 2.2 AA (focus rings, semantic landmarks, reduced-motion, keyboard support).
+Next.js 14.2.35 App Router, TypeScript, React Server Components, Server Actions, Tailwind CSS, local file-backed demo persistence.
 
-## Project structure
+The app avoids build-time Google font fetching so local and CI builds work without external font network access.
 
-```
+## Project Structure
+
+```text
 src/
   app/
-    login/                 # demo sign-in (role picker) + actions
-    (app)/                 # authenticated shell
+    login/
+    (app)/
       dashboard/
-      braille/             # Module 1: list, new, detail + review workflow, actions
-      assessment/          # Assessment-Safe: list, new, detail + workflow, actions
-      audit/               # audit trail (SENCO/QTVI/Admin)
-      stem/  admin/        # roadmap placeholders
-  components/              # ui primitives, nav, page header
+      braille/
+      assessment/
+      stem/
+      pupils/
+      approvals/
+      quality/
+      audit/
+      admin/
+  components/
   lib/
-    store.ts               # in-memory seeded data (the only stateful module)
-    session.ts             # cookie session (swap for real auth later)
-    rbac.ts                # roles → permissions
-    braille-engine.ts      # mock transcription + visual description (swappable)
-    feedback.ts            # feedback heuristics
-    data.ts  types.ts  utils.ts
+    store.ts          local demo persistence and seed data
+    session.ts        auth boundary and DEMO_MODE switch
+    rbac.ts           roles and permissions
+    braille-engine.ts mock transcription/description engine
+    feedback.ts       feedback draft heuristics
+    export-content.ts export document builder
 ```
 
-## Scaling path
+## Scaling Path
 
-This MVP shares its architecture with the production design (see the sibling `insighted-ai` project): swap `store.ts` for Supabase/Postgres with Row-Level Security, `session.ts` for Supabase Auth, and the mock engine for a real vision/OCR provider behind the same interface. The UI, workflow, and RBAC stay unchanged.
+Replace `store.ts` with Supabase/Postgres plus Row Level Security, replace local upload storage with Supabase Storage or Vercel Blob, replace `session.ts` internals with Supabase Auth or OIDC, and replace `braille-engine.ts` with a real OCR/vision provider. Keep the workflow, RBAC, audit, and approval model.
+
+## Current Limitations
+
+* AI services are mock/heuristic and must remain labelled as draft output.
+* Local file persistence is suitable for demos, not serverless production durability.
+* `DEMO_MODE=false` disables the staff picker but still needs a real auth provider implementation.
+* npm audit on 30 June 2026 still recommends a breaking Next 16 migration for remaining advisories; this branch conservatively patches the app to Next 14.2.35.

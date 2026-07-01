@@ -2,11 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
-import { getStemTask, getTaskUpload } from "@/lib/data";
-import { pupilLabel, userName } from "@/lib/store";
+import { getStemTask, getTaskAudit, getTaskUpload } from "@/lib/data";
+import { pupilLabel, uploadDataUrl, userName } from "@/lib/store";
 import { can } from "@/lib/rbac";
 import { VISUAL_TYPE_LABELS, STRUCTURE_TEMPLATES } from "@/lib/braille-engine";
 import { TaskBadge } from "@/components/ui/badge";
+import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
 import { StemWorkflow } from "./stem-workflow";
 
@@ -16,8 +17,9 @@ export default function StemDetailPage({ params }: { params: { id: string } }) {
   if (!task) notFound();
 
   const up = getTaskUpload(task.id);
+  const timeline = getTaskAudit(task.id);
   const upload = up
-    ? { dataUrl: up.dataUrl, fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
+    ? { dataUrl: uploadDataUrl(up), fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
     : null;
 
   return (
@@ -40,8 +42,11 @@ export default function StemDetailPage({ params }: { params: { id: string } }) {
         task={task}
         upload={upload}
         structure={STRUCTURE_TEMPLATES[task.visualType]}
-        permissions={{ canApprove: can(user.role, "stem.approve"), canExport: can(user.role, "export") }}
+        permissions={{ canApprove: can(user.role, "stem.approve"), canEdit: can(user.role, "description.edit"), canExport: can(user.role, "export") }}
       />
+      <div className="mt-5">
+        <TaskTimeline entries={timeline} />
+      </div>
     </div>
   );
 }

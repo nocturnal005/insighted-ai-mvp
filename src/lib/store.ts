@@ -10,6 +10,8 @@ import type {
   VisualDescriptionTask,
 } from "@/lib/types";
 import { scorePair } from "@/lib/metrics";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * In-memory data store for the runnable MVP. Seeded with realistic demo data so the app
@@ -33,13 +35,39 @@ interface Db {
 }
 
 const ORG = "org_northgate";
+const DATA_DIR = join(process.cwd(), ".insighted-data");
+const UPLOAD_DIR = join(DATA_DIR, "uploads");
+const DB_FILE = join(DATA_DIR, "db.json");
+
+function ensureDataDirs(): void {
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  if (!existsSync(UPLOAD_DIR)) mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+function loadPersistedDb(): Db | null {
+  try {
+    if (!existsSync(DB_FILE)) return null;
+    return JSON.parse(readFileSync(DB_FILE, "utf8")) as Db;
+  } catch {
+    return null;
+  }
+}
+
+function saveDb(): void {
+  try {
+    ensureDataDirs();
+    writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  } catch {
+    // A production database adapter should fail loudly; the local demo remains usable.
+  }
+}
 
 function seed(): Db {
   const now = Date.now();
   const iso = (minsAgo: number) => new Date(now - minsAgo * 60000).toISOString();
 
   const users: User[] = [
-    { id: "u_amelia", organisationId: ORG, fullName: "Amelia Stone", role: "teaching_assistant", email: "amelia@northgate.sch.uk" },
+    { id: "u_amelia", organisationId: ORG, fullName: "Amelia Stone", role: "teaching_assistant", email: "amelia@northgate.sch.uk", brailleLiterate: true },
     { id: "u_david", organisationId: ORG, fullName: "David Okafor", role: "teacher", email: "david@northgate.sch.uk" },
     { id: "u_priya", organisationId: ORG, fullName: "Priya Sharma", role: "qtvi", email: "priya@northgate.sch.uk" },
     { id: "u_helen", organisationId: ORG, fullName: "Helen Wright", role: "senco", email: "helen@northgate.sch.uk" },
@@ -67,21 +95,31 @@ function seed(): Db {
         draftText: "In 1066 William of Normandy defeated King Harold at the Battle of Hastings. Many Anglo-Saxon nobles lost there land.",
         editedText: "In 1066 William of Normandy defeated King Harold at the Battle of Hastings. Many Anglo-Saxon nobles lost their land.",
         finalText: "In 1066 William of Normandy defeated King Harold at the Battle of Hastings. Many Anglo-Saxon nobles lost their land.",
-        status: "verified",
+        status: "specialist_verified",
         confidence: 0.9,
         lowConfidenceRegions: [{ text: "there", reason: "Possible homophone error (likely 'their')" }],
         engine: "mock-v1",
-        verifiedBy: "u_david",
-        verifiedAt: iso(180),
+        specialistVerifiedBy: "u_priya",
+        specialistVerifiedAt: iso(180),
+        specialistNotes: "Braille accuracy checked by QTVI before the teacher feedback stage.",
+        brailleAccuracyFindings: ["Homophone corrected: there -> their"],
+        subjectTeacherReviewedBy: "u_david",
+        subjectTeacherReviewedAt: iso(176),
       },
       feedback: {
         summary: "AI draft flagged 1 spelling item for your review.",
         findings: { spelling: ['"there" → suggested "their (check homophone)"'], contractions: [], formatting: [], unclear: [] },
+        specialistNotes: "QTVI verified the English transcription. Subject feedback below is not a Braille accuracy judgement.",
+        subjectFeedback: "Strong factual recall. Review the their/there point together.",
         teacherComments: "Strong factual recall. Review the their/there point together.",
         learnerSummary: "Great work on the key dates — let's check one spelling next time.",
+        reviewWarnings: [],
+        approvedFinalComments: "Strong factual recall. Review the their/there point together.",
         status: "approved",
         approvedBy: "u_david",
         approvedAt: iso(174),
+        teacherReviewedBy: "u_david",
+        teacherReviewedAt: iso(174),
         createdAt: iso(175),
       },
       rejectionReason: null,
@@ -95,7 +133,7 @@ function seed(): Db {
       title: "Year 9 science — the water cycle",
       subject: "Science",
       pupilId: "p_001",
-      status: "needs_review",
+      status: "needs_specialist_review",
       createdBy: "u_amelia",
       assignedTo: "u_priya",
       uploadId: null,
@@ -103,15 +141,19 @@ function seed(): Db {
         draftText: "The water cycle has four main stages... Finally, the water collects and the cycle begins agan.",
         editedText: "The water cycle has four main stages... Finally, the water collects and the cycle begins agan.",
         finalText: null,
-        status: "draft",
+        status: "needs_specialist_review",
         confidence: 0.87,
         lowConfidenceRegions: [
           { text: "vapour", reason: "Possible missed UEB contraction" },
           { text: "agan", reason: "Low-confidence character cluster (likely 'again')" },
         ],
         engine: "mock-v1",
-        verifiedBy: null,
-        verifiedAt: null,
+        specialistVerifiedBy: null,
+        specialistVerifiedAt: null,
+        specialistNotes: "",
+        brailleAccuracyFindings: [],
+        subjectTeacherReviewedBy: null,
+        subjectTeacherReviewedAt: null,
       },
       feedback: null,
       rejectionReason: null,
@@ -187,18 +229,20 @@ function seed(): Db {
   ];
 
   const audit: AuditEntry[] = [
-    { id: "a1", organisationId: ORG, actorId: "u_david", actorName: "David Okafor", action: "transcription.verify", objectType: "Braille review", objectLabel: "Battle of Hastings", createdAt: iso(180) },
-    { id: "a2", organisationId: ORG, actorId: "u_david", actorName: "David Okafor", action: "feedback.approve", objectType: "Feedback report", objectLabel: "Battle of Hastings", createdAt: iso(174) },
-    { id: "a3", organisationId: ORG, actorId: "u_david", actorName: "David Okafor", action: "export", objectType: "Feedback report", objectLabel: "Battle of Hastings", createdAt: iso(170) },
-    { id: "a4", organisationId: ORG, actorId: "u_priya", actorName: "Priya Sharma", action: "visual.approve", objectType: "Visual description", objectLabel: "Distance/time graph", createdAt: iso(60) },
-    { id: "a5", organisationId: ORG, actorId: "u_amelia", actorName: "Amelia Stone", action: "task.create", objectType: "Braille review", objectLabel: "The water cycle", createdAt: iso(90) },
+    { id: "a1", organisationId: ORG, actorId: "u_priya", actorName: "Priya Sharma", actorRole: "qtvi", action: "transcription.specialist_verify", objectType: "Braille review", objectLabel: "Battle of Hastings", taskId: "bt_1001", previousStatus: "needs_specialist_review", newStatus: "specialist_verified", createdAt: iso(180) },
+    { id: "a2", organisationId: ORG, actorId: "u_david", actorName: "David Okafor", actorRole: "teacher", action: "feedback.approve", objectType: "Feedback report", objectLabel: "Battle of Hastings", taskId: "bt_1001", previousStatus: "teacher_review", newStatus: "approved", createdAt: iso(174) },
+    { id: "a3", organisationId: ORG, actorId: "u_david", actorName: "David Okafor", actorRole: "teacher", action: "export.completed", objectType: "Feedback report", objectLabel: "Battle of Hastings", taskId: "bt_1001", createdAt: iso(170) },
+    { id: "a4", organisationId: ORG, actorId: "u_priya", actorName: "Priya Sharma", actorRole: "qtvi", action: "visual.approve", objectType: "Visual description", objectLabel: "Distance/time graph", taskId: "vd_2001", previousStatus: "draft", newStatus: "approved", createdAt: iso(60) },
+    { id: "a5", organisationId: ORG, actorId: "u_amelia", actorName: "Amelia Stone", actorRole: "teaching_assistant", action: "task.create", objectType: "Braille review", objectLabel: "The water cycle", taskId: "bt_1002", newStatus: "needs_specialist_review", createdAt: iso(90) },
   ];
 
   return { users, pupils, brailleTasks, visualTasks, stemTasks, uploads: [], corrections, evalSamples, audit, settings: { retentionDays: 365, trainOnData: false } };
 }
 
+ensureDataDirs();
 const g = globalThis as unknown as { __insighted_db?: Db };
-export const db: Db = g.__insighted_db ?? (g.__insighted_db = seed());
+export const db: Db = g.__insighted_db ?? (g.__insighted_db = loadPersistedDb() ?? seed());
+if (!existsSync(DB_FILE)) saveDb();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 let counter = 0;
@@ -210,11 +254,17 @@ export function id(prefix: string): string {
 export function recordAudit(entry: {
   actorId: string | null;
   actorName: string;
+  actorRole?: AuditEntry["actorRole"];
   action: string;
   objectType: string;
   objectLabel: string;
+  taskId?: string | null;
+  previousStatus?: string | null;
+  newStatus?: string | null;
+  reason?: string | null;
 }): void {
   db.audit.unshift({ id: id("a"), organisationId: ORG, createdAt: new Date().toISOString(), ...entry });
+  saveDb();
 }
 
 /**
@@ -228,18 +278,24 @@ export function createUpload(params: {
   fileName: string;
   fileType: string;
   byteSize: number;
-  dataUrl: string;
+  data: Buffer;
   uploadedBy: User;
 }): string {
+  ensureDataDirs();
+  const uploadId = id("up");
+  const safeName = params.fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) || "upload";
+  const storagePath = join(UPLOAD_DIR, `${uploadId}-${safeName}`);
+  writeFileSync(storagePath, params.data);
+
   const upload: Upload = {
-    id: id("up"),
+    id: uploadId,
     organisationId: ORG,
     taskId: params.taskId,
     module: params.module,
     fileName: params.fileName,
     fileType: params.fileType,
     byteSize: params.byteSize,
-    dataUrl: params.dataUrl,
+    storagePath,
     uploadedBy: params.uploadedBy.id,
     createdAt: new Date().toISOString(),
   };
@@ -247,11 +303,23 @@ export function createUpload(params: {
   recordAudit({
     actorId: params.uploadedBy.id,
     actorName: params.uploadedBy.fullName,
+    actorRole: params.uploadedBy.role,
     action: "upload.create",
     objectType: "Upload",
     objectLabel: params.fileName,
+    taskId: params.taskId,
   });
   return upload.id;
+}
+
+export function uploadDataUrl(upload: Upload): string {
+  if (upload.dataUrl) return upload.dataUrl;
+  try {
+    const data = readFileSync(upload.storagePath);
+    return `data:${upload.fileType};base64,${data.toString("base64")}`;
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -279,6 +347,32 @@ export function recordCorrection(params: {
     verifiedByName: params.verifiedByName,
     createdAt: new Date().toISOString(),
   });
+  saveDb();
+}
+
+export function persistDb(): void {
+  saveDb();
+}
+
+export function purgeExpiredUploads(retentionDays: number): Upload[] {
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const expired = db.uploads.filter((u) => new Date(u.createdAt).getTime() < cutoff);
+  if (!expired.length) return [];
+
+  for (const upload of expired) {
+    try {
+      if (existsSync(upload.storagePath)) unlinkSync(upload.storagePath);
+    } catch {
+      // Continue purging metadata so the UI no longer exposes expired material.
+    }
+    for (const task of [...db.brailleTasks, ...db.visualTasks, ...db.stemTasks]) {
+      if (task.uploadId === upload.id) task.uploadId = null;
+    }
+  }
+
+  db.uploads = db.uploads.filter((u) => !expired.some((x) => x.id === u.id));
+  saveDb();
+  return expired;
 }
 
 export function findUser(userId: string): User | undefined {

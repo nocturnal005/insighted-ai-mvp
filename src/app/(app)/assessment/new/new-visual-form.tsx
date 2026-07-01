@@ -41,8 +41,21 @@ export function NewVisualForm({ pupils }: { pupils: { id: string; label: string 
               <label htmlFor="context" className="mb-1.5 block text-sm font-medium text-zinc-700">Use</label>
               <select id="context" name="context" className="input" defaultValue="assessment">
                 <option value="lesson">Lesson use</option>
-                <option value="assessment">Assessment use</option>
+                <option value="class_test">Class test</option>
+                <option value="mock_assessment">Mock assessment</option>
+                <option value="formal_assessment_preparation">Formal assessment preparation</option>
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div>
+              <label htmlFor="questionPrompt" className="mb-1.5 block text-sm font-medium text-zinc-700">Question prompt or task instruction</label>
+              <textarea id="questionPrompt" name="questionPrompt" rows={3} placeholder="e.g. Describe the motion shown by the distance-time graph." className="input min-h-24 py-2.5" />
+            </div>
+            <div>
+              <label htmlFor="assessedSkill" className="mb-1.5 block text-sm font-medium text-zinc-700">What is being assessed?</label>
+              <textarea id="assessedSkill" name="assessedSkill" rows={3} placeholder="e.g. Interpreting gradient and comparing speeds, without giving the trend away." className="input min-h-24 py-2.5" />
             </div>
           </div>
 
@@ -60,7 +73,7 @@ export function NewVisualForm({ pupils }: { pupils: { id: string; label: string 
               <Upload className="h-6 w-6 text-zinc-400" />
               <span className="mt-2 text-sm text-zinc-700">{fileName ?? "Click to choose an image"}</span>
               <span className="mt-0.5 text-xs text-zinc-400">PNG or JPEG · optional for this demo</span>
-              <input id="image" name="image" type="file" accept="image/png,image/jpeg" className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
+              <input id="image" name="image" type="file" accept="image/png,image/jpeg,application/pdf" className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
             </label>
           </div>
 
