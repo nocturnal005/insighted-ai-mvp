@@ -4,18 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
-import { db, id, recordAudit, createUpload } from "@/lib/store";
-import { getVisualTask } from "@/lib/data";
-import { describeVisual, mapFlagsToAnswerSensitiveFlags } from "@/lib/ai";
+import { db, id, recordAudit, createUpload, uploadDataUrl } from "@/lib/store";
+import { getVisualTask, getTaskUpload } from "@/lib/data";
+import { describeVisual, mapFlagsToAnswerSensitiveFlags, summariseFlags, toStoredFlags } from "@/lib/ai";
+import { assertValidUpload } from "@/lib/upload-guard";
 import type { HintTier, VisualDescriptionTask } from "@/lib/types";
 
-const ALLOWED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "application/pdf"]);
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-
-function assertValidUpload(file: File): void {
-  if (!ALLOWED_UPLOAD_TYPES.has(file.type)) throw new Error("Upload must be PNG, JPG, JPEG, or PDF");
-  if (file.size > MAX_UPLOAD_BYTES) throw new Error("Upload must be 10MB or smaller");
-}
+/** Contexts where a missing prompt/skill is an assessment-safety risk worth surfacing. */
+const ASSESSMENT_CONTEXTS = new Set(["class_test", "mock_assessment", "formal_assessment_preparation", "assessment"]);
 
 export async function createVisualTask(formData: FormData) {
   const user = requireUser();
@@ -61,6 +57,22 @@ export async function createVisualTask(formData: FormData) {
   }
 
   // Generate the neutral, assessment-safe description from the image + assessment context.
+  await generateVisualDescription(user, task, dataUrl);
+
+  redirect(`/assessment/${task.id}`);
+}
+
+/**
+ * Shared: run `describeVisual` for a task, store the draft + full AI flags + provenance,
+ * and audit `ai.visual_description.run`. Only non-identifying context is sent to the
+ * provider (title/subject/year group/prompt/skill/image) plus a boolean pupil-link.
+ */
+async function generateVisualDescription(
+  user: ReturnType<typeof requireUser>,
+  task: VisualDescriptionTask,
+  dataUrl: string | undefined,
+  reason?: string,
+) {
   const result = await describeVisual({
     taskId: task.id,
     title: task.title,
@@ -71,6 +83,7 @@ export async function createVisualTask(formData: FormData) {
     questionPrompt: task.questionPrompt,
     assessedSkill: task.assessedSkill,
     dataUrl,
+    hasLinkedPupil: Boolean(task.pupilId),
   });
 
   task.draftDescription = result.neutralDescription;
@@ -82,6 +95,7 @@ export async function createVisualTask(formData: FormData) {
   task.confidence = result.confidence;
   task.promptVersion = result.meta.promptVersion;
   task.processingMs = result.meta.processingMs;
+  task.aiFlags = toStoredFlags(result.answerSensitiveFlags);
   task.updatedAt = new Date().toISOString();
 
   recordAudit({
@@ -90,7 +104,7 @@ export async function createVisualTask(formData: FormData) {
     actorRole: user.role,
     action: "ai.visual_description.run",
     objectType: "Visual description",
-    objectLabel: title,
+    objectLabel: task.title,
     taskId: task.id,
     newStatus: task.status,
     provider: result.meta.provider,
@@ -98,9 +112,66 @@ export async function createVisualTask(formData: FormData) {
     confidence: result.confidence,
     processingMs: result.meta.processingMs,
     aiMode: result.meta.mode,
+    promptVersion: result.meta.promptVersion,
+    flagSummary: summariseFlags(result.answerSensitiveFlags),
+    reason: reason ?? null,
+  });
+}
+
+/**
+ * Edit assessment-safety metadata (question prompt, assessed skill, context, hint tier)
+ * after creation, then regenerate the description so answer-sensitivity is re-evaluated
+ * against the new context. Blocked once approved.
+ */
+export async function updateVisualContext(taskId: string, formData: FormData) {
+  const user = requireUser();
+  if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
+  const task = getVisualTask(taskId);
+  if (!task) throw new Error("Not found");
+  if (task.status === "approved") throw new Error("Approved and locked");
+
+  task.questionPrompt = String(formData.get("questionPrompt") || "").trim() || null;
+  task.assessedSkill = String(formData.get("assessedSkill") || "").trim() || null;
+  task.context = String(formData.get("context") || task.context) as VisualDescriptionTask["context"];
+  const tier = String(formData.get("hintTier") || task.hintTier) as HintTier;
+  if (tier === "tier_0" || tier === "tier_1" || tier === "tier_2") task.hintTier = tier;
+  task.updatedAt = new Date().toISOString();
+
+  recordAudit({
+    actorId: user.id,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "visual.context.edit",
+    objectType: "Visual description",
+    objectLabel: task.title,
+    taskId: task.id,
+    reason:
+      ASSESSMENT_CONTEXTS.has(task.context) && (!task.questionPrompt || !task.assessedSkill)
+        ? "Assessment context set without question prompt and/or assessed skill"
+        : null,
   });
 
-  redirect(`/assessment/${task.id}`);
+  // Re-run using the stored upload so the new context is reflected in the draft + flags.
+  const upload = getTaskUpload(task.id);
+  const dataUrl = upload ? uploadDataUrl(upload) : undefined;
+  await generateVisualDescription(user, task, dataUrl || undefined, "Regenerated after assessment-context edit");
+  revalidatePath(`/assessment/${taskId}`);
+}
+
+/** Explicitly re-run the visual description from the stored upload. Blocked once approved. */
+export async function rerunVisualDescription(taskId: string) {
+  const user = requireUser();
+  if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
+  const task = getVisualTask(taskId);
+  if (!task) throw new Error("Not found");
+  if (task.status === "approved") throw new Error("Approved and locked. An admin must reopen it to re-run.");
+
+  const prior = task.editedDescription?.trim();
+  const reason = prior ? `Re-ran description; previous text preserved: "${prior.slice(0, 140)}"` : "Re-ran description";
+  const upload = getTaskUpload(task.id);
+  const dataUrl = upload ? uploadDataUrl(upload) : undefined;
+  await generateVisualDescription(user, task, dataUrl || undefined, reason);
+  revalidatePath(`/assessment/${taskId}`);
 }
 
 export async function updateVisual(taskId: string, editedDescription: string, hintTier: HintTier) {

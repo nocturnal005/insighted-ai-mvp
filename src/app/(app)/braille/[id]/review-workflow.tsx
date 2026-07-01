@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import {
   Sparkles, Loader2, CheckCircle2, AlertTriangle, FileText, Lock,
-  XCircle, Archive, Ban, UploadCloud, ScanText, ShieldCheck, FileCheck2,
+  XCircle, Archive, Ban, UploadCloud, ScanText, ShieldCheck, FileCheck2, RefreshCw,
 } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { TranscriptionBadge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { AiMeta } from "@/components/ai-meta";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import type { BrailleTask } from "@/lib/types";
 import {
-  runTranscription, saveTranscription, verifyTranscription,
+  runTranscription, rerunBrailleTranscription, saveTranscription, verifyTranscription,
   createFeedback, saveFeedback, approveFeedback, rejectBrailleTask, archiveBrailleTask,
 } from "../actions";
 
@@ -113,7 +113,28 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
             <div className="flex items-center gap-3"><span className="text-xs text-zinc-400">Confidence {Math.round(t.confidence * 100)}%</span><TranscriptionBadge status={t.status} /></div>
           </CardHeader>
           <CardBody className="space-y-4">
-            <AiMeta mode={t.aiMode} provider={t.aiProvider} model={t.aiModel} confidence={t.confidence} promptVersion={t.promptVersion} />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <AiMeta
+                mode={t.aiMode}
+                provider={t.aiProvider}
+                model={t.aiModel}
+                confidence={t.confidence}
+                promptVersion={t.promptVersion}
+                processingMs={t.processingMs}
+                flagCount={t.aiFlags?.length}
+                unavailable={(t.aiFlags ?? []).some((f) => f.category === "provider_unavailable" || f.category === "processing_failed")}
+              />
+              {!verified && permissions.canEdit && Boolean(upload) && (
+                <button
+                  onClick={() => run("rerun", () => rerunBrailleTranscription(task.id))}
+                  disabled={pending}
+                  title="Re-run OCR on the uploaded image"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  {action === "rerun" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Re-run AI/OCR
+                </button>
+              )}
+            </div>
             {!verified && (
               <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>This is an AI/OCR draft. It must be checked by a QTVI or Braille-literate specialist before teacher feedback or export.</span></div>
             )}

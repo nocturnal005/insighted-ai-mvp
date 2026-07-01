@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Lock, CheckCircle2, ListChecks, ShieldAlert, EyeOff } from "lucide-react";
+import { Loader2, Lock, CheckCircle2, ListChecks, ShieldAlert, RefreshCw } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExportMenu } from "@/components/export-menu";
 import { AiMeta } from "@/components/ai-meta";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import type { DescriptionStyle, StemTask } from "@/lib/types";
-import { restyleStem, updateStem, approveStem } from "../actions";
+import { restyleStem, rerunStemDescription, updateStem, approveStem } from "../actions";
 
 const STYLES: { value: DescriptionStyle; label: string }[] = [
   { value: "descriptive", label: "Descriptive" },
@@ -78,7 +78,28 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
       <Card>
         <CardHeader><CardTitle>Structured description</CardTitle>{!approved && <span className="text-xs text-zinc-400">Draft · editable</span>}</CardHeader>
         <CardBody className="space-y-4">
-          <AiMeta mode={task.aiMode} provider={task.aiProvider} model={task.aiModel} confidence={task.confidence} promptVersion={task.promptVersion} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <AiMeta
+              mode={task.aiMode}
+              provider={task.aiProvider}
+              model={task.aiModel}
+              confidence={task.confidence}
+              promptVersion={task.promptVersion}
+              processingMs={task.processingMs}
+              flagCount={task.aiFlags?.length}
+              unavailable={(task.aiFlags ?? []).some((f) => f.category === "provider_unavailable" || f.category === "processing_failed")}
+            />
+            {!approved && permissions.canEdit && Boolean(upload) && (
+              <button
+                onClick={() => run("rerun", async () => { await rerunStemDescription(task.id); setText(""); })}
+                disabled={pending}
+                title="Re-run the description on the uploaded image"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {action === "rerun" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Re-run AI/OCR
+              </button>
+            )}
+          </div>
           {!approved && (
             <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><span>This is an AI draft. Check the structure and remove anything that reveals the answer before approving.</span></div>
           )}

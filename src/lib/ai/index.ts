@@ -25,14 +25,28 @@ import {
 } from "./providers/openai-vision-provider";
 import { transcribeBrailleExternal } from "./providers/external-braille-provider";
 
+import { assertRealAiDataAllowed } from "./safety";
+
 export * from "./types";
 export { getAiConfig, isRealAiEnabled, getUploadLimits, validateUpload } from "./config";
 export {
   mapFlagsToLowConfidenceRegions,
   mapFlagsToAnswerSensitiveFlags,
   summariseFlags,
+  toStoredFlags,
 } from "./uncertainty";
 export { simulateOcrMock } from "./providers/mock-provider";
+
+/** Pupil-data safety flags for the current config + task. Boolean pupil-link only. */
+function pupilSafetyFlags(hasLinkedPupil: boolean | undefined, objectLabel: string): UncertaintyFlag[] {
+  const config = getAiConfig();
+  return assertRealAiDataAllowed({
+    aiMode: config.mode,
+    allowRealPupilData: config.allowRealPupilData,
+    hasLinkedPupil,
+    objectLabel,
+  });
+}
 
 /** Preprocess an uploaded image when present; returns the (possibly) normalised data URL. */
 async function prepare(input: { dataUrl?: string; imageUrl?: string; mimeType?: string }): Promise<{
@@ -71,7 +85,12 @@ export async function transcribeBraille(input: BrailleOcrInput): Promise<Braille
     result = await transcribeBrailleMock(routed);
   }
 
-  return { ...result, flags: [...warnings, ...result.flags], requiresSpecialistReview: true };
+  const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
+  return {
+    ...result,
+    flags: [...warnings, ...pupilFlags, ...result.flags],
+    requiresSpecialistReview: true,
+  };
 }
 
 /** True when real OpenAI vision should be used (mock stays fully offline). */
@@ -89,7 +108,12 @@ export async function describeVisual(input: VisualDescriptionInput): Promise<Vis
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
   const result = shouldUseRealOpenAi() ? await describeVisualWithOpenAI(routed) : await describeVisualMock(routed);
-  return { ...result, answerSensitiveFlags: [...warnings, ...result.answerSensitiveFlags], requiresHumanApproval: true };
+  const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
+  return {
+    ...result,
+    answerSensitiveFlags: [...warnings, ...pupilFlags, ...result.answerSensitiveFlags],
+    requiresHumanApproval: true,
+  };
 }
 
 /** STEM structured description. Real OpenAI in real mode (self-handling missing config), else mock. */
@@ -97,5 +121,10 @@ export async function describeStemVisual(input: StemDescriptionInput): Promise<S
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
   const result = shouldUseRealOpenAi() ? await describeStemWithOpenAI(routed) : await describeStemMock(routed);
-  return { ...result, answerSensitiveFlags: [...warnings, ...result.answerSensitiveFlags], requiresHumanApproval: true };
+  const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
+  return {
+    ...result,
+    answerSensitiveFlags: [...warnings, ...pupilFlags, ...result.answerSensitiveFlags],
+    requiresHumanApproval: true,
+  };
 }

@@ -90,6 +90,12 @@ export interface BrailleOcrInput {
   imageUrl?: string;
   subject?: string | null;
   yearGroup?: string | null;
+  /**
+   * Whether this task is linked to a pupil record. A boolean only — never a pupil name or
+   * identifier. Used by the real-pupil-data safety guard; identifiers are never sent to a
+   * provider.
+   */
+  hasLinkedPupil?: boolean;
 }
 
 export interface BraillePageResult {
@@ -106,6 +112,8 @@ export interface BrailleOcrResult {
   rawBraille?: string | null;
   rawCells?: unknown;
   pageResults?: BraillePageResult[];
+  /** Opaque request id, only when an external provider returns one. Never invented. */
+  providerRequestId?: string | null;
   meta: AiProcessingMeta;
   /** Braille OCR output is never final — a specialist must verify accuracy. */
   requiresSpecialistReview: true;
@@ -142,6 +150,8 @@ export interface VisualDescriptionInput {
   assessedSkill?: string | null;
   dataUrl?: string;
   imageUrl?: string;
+  /** Boolean only — never a pupil name/identifier. Drives the pupil-data safety guard. */
+  hasLinkedPupil?: boolean;
 }
 
 export interface VisualDescriptionResult {

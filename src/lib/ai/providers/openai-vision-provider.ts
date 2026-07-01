@@ -36,9 +36,11 @@ import {
   providerUnavailableFlag,
   requiresSpecialistReviewFlag,
 } from "../uncertainty";
-import { assessmentContextFlags, safeErrorLabel } from "../safety";
+import { assessmentContextFlags, safeErrorLabel, truncateText } from "../safety";
 
 const PROVIDER = "openai";
+/** Never store/display more than this many provider flags, however many are returned. */
+const MAX_FLAGS = 20;
 
 const KNOWN_CATEGORIES: UncertaintyCategory[] = [
   "low_image_quality", "low_ocr_confidence", "unclear_braille_cell", "possible_contraction_issue",
@@ -100,10 +102,11 @@ const VISUAL_TYPES: DetectedVisualType[] = [
 ];
 
 function mapRawFlags(raw: z.infer<typeof rawFlagSchema>[] | undefined, fallbackCat: UncertaintyCategory): UncertaintyFlag[] {
-  return (raw ?? []).map((f) =>
+  return (raw ?? []).slice(0, MAX_FLAGS).map((f) =>
     makeFlag({
-      text: f.text,
-      reason: f.reason,
+      // Sanitise: overlong model text/reason can never flood the UI or audit.
+      text: truncateText(f.text || "Flag"),
+      reason: truncateText(f.reason || ""),
       category: coerceCategory(f.category, fallbackCat),
       severity: coerceSeverity(f.severity),
     }),
@@ -159,6 +162,10 @@ export async function describeVisualWithOpenAI(input: VisualDescriptionInput): P
   try {
     const json = await callVisionJson(buildVisualPrompt(input), image, model);
     const parsed = visualSchema.parse(json);
+    // An empty description is a failed run, not a valid neutral description.
+    if (!parsed.neutralDescription.trim()) {
+      return visualFallback(input, timer, model, [processingFailedFlag("empty description"), ...contextFlags]);
+    }
     const flags = [...mapRawFlags(parsed.answerSensitiveFlags, "answer_leak_risk"), ...contextFlags];
     const visualType = (VISUAL_TYPES as string[]).includes(parsed.visualType ?? "")
       ? (parsed.visualType as DetectedVisualType)
@@ -198,6 +205,10 @@ export async function describeStemWithOpenAI(input: StemDescriptionInput): Promi
     const flags = mapRawFlags(parsed.answerSensitiveFlags, "answer_leak_risk");
     const structuredDescription =
       parsed.structuredDescription ?? sections.map((s) => `${s.heading}: ${s.content}`).join("\n");
+    // No usable structured output → treat as a failed run rather than an empty description.
+    if (!structuredDescription.trim() && sections.length === 0) {
+      return stemFallback(timer, model, [processingFailedFlag("empty description")]);
+    }
     return {
       structuredDescription,
       sections,
@@ -237,6 +248,10 @@ export async function transcribeBrailleWithOpenAIDraft(input: BrailleOcrInput): 
       model,
     );
     const parsed = brailleSchema.parse(json);
+    // Empty draft text means the model produced nothing usable — a failed run.
+    if (!parsed.draftText.trim()) {
+      return brailleFallback(timer, model, [specialistFlag, draftOnlyFlag, processingFailedFlag("empty draft")]);
+    }
     const modelFlags = mapRawFlags(parsed.flags, "low_ocr_confidence");
     const flags = [specialistFlag, draftOnlyFlag, ...modelFlags];
     // Cap OpenAI Braille confidence conservatively — it is not specialist OCR.

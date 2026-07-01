@@ -283,6 +283,8 @@ export function recordAudit(entry: {
   confidence?: number | null;
   processingMs?: number | null;
   aiMode?: AuditEntry["aiMode"];
+  promptVersion?: string | null;
+  flagSummary?: string[] | null;
 }): void {
   db.audit.unshift({ id: id("a"), organisationId: ORG, createdAt: new Date().toISOString(), ...entry });
   saveDb();

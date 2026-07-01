@@ -43,6 +43,12 @@ export interface QualityStats {
   samples: number;
   evaluated: number;
   evalAvgCer: number | null;
+  // Aggregate evaluation metrics across evaluated samples.
+  evalAvgWer: number | null;
+  evalAvgConfidence: number | null;
+  byProvider: Array<{ key: string; count: number }>;
+  byBrailleType: Array<{ key: string; count: number }>;
+  topFlagCategories: Array<{ key: string; count: number }>;
 }
 
 /** Aggregate OCR quality: correction burden (from the verify loop) + harness accuracy. */
@@ -50,6 +56,20 @@ export function getQualityStats(): QualityStats {
   const c = db.corrections;
   const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
   const run = db.evalSamples.filter((s) => s.cer !== null);
+
+  const tally = (pairs: Array<string | null | undefined>): Array<{ key: string; count: number }> => {
+    const m = new Map<string, number>();
+    for (const raw of pairs) {
+      const key = raw ?? "unknown";
+      m.set(key, (m.get(key) ?? 0) + 1);
+    }
+    return [...m.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);
+  };
+
+  const confidences = run.map((s) => s.confidence).filter((x): x is number => typeof x === "number");
+  const flagCategories: string[] = [];
+  for (const s of run) for (const f of s.aiFlags ?? []) flagCategories.push(f.category);
+
   return {
     pairs: c.length,
     avgCer: avg(c.map((x) => x.cer)),
@@ -57,6 +77,11 @@ export function getQualityStats(): QualityStats {
     samples: db.evalSamples.length,
     evaluated: run.length,
     evalAvgCer: avg(run.map((s) => s.cer as number)),
+    evalAvgWer: avg(run.map((s) => s.wer as number)),
+    evalAvgConfidence: avg(confidences),
+    byProvider: tally(run.map((s) => s.provider)),
+    byBrailleType: tally(db.evalSamples.map((s) => s.brailleType)),
+    topFlagCategories: tally(flagCategories).slice(0, 6),
   };
 }
 

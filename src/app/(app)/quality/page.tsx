@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Gauge, Plus, Play, Database, Trash2, FlaskConical } from "lucide-react";
+import { Gauge, Plus, Play, Database, Trash2, FlaskConical, ShieldAlert } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { getCorrections, getEvalSamples, getQualityStats } from "@/lib/data";
@@ -46,6 +46,15 @@ export default function QualityPage() {
         )}
       </div>
 
+      {/* Data-protection warning — evaluation data governance */}
+      <div className="mb-6 flex items-start gap-2.5 rounded-xl border border-caution-200/60 bg-caution-50 px-4 py-3 text-sm text-caution-700">
+        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>
+          Evaluation samples must be synthetic or anonymised unless school permission and data protection
+          approval are confirmed.
+        </span>
+      </div>
+
       {/* Overview */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat icon={Database} label="Labelled pairs captured" value={String(stats.pairs)} />
@@ -53,6 +62,21 @@ export default function QualityPage() {
         <Stat icon={FlaskConical} label="Ground-truth samples" value={String(stats.samples)} />
         <Stat icon={Play} label="Harness accuracy" value={stats.evalAvgCer === null ? "—" : pct(1 - stats.evalAvgCer)} hint={`${stats.evaluated} evaluated`} />
       </div>
+
+      {/* Aggregate evaluation metrics */}
+      {stats.evaluated > 0 && (
+        <Card className="mb-6">
+          <CardHeader><CardTitle>Aggregate metrics</CardTitle><span className="text-xs text-zinc-400">Across {stats.evaluated} evaluated sample(s)</span></CardHeader>
+          <CardBody className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Metric label="Average CER" value={pct(stats.evalAvgCer)} />
+            <Metric label="Average WER" value={pct(stats.evalAvgWer)} />
+            <Metric label="Average confidence" value={stats.evalAvgConfidence == null ? "—" : `${Math.round(stats.evalAvgConfidence * 100)}%`} />
+            <Metric label="By provider" value={stats.byProvider.map((p) => `${p.key}: ${p.count}`).join(", ") || "—"} />
+            <Metric label="By Braille type" value={stats.byBrailleType.map((b) => `${b.key}: ${b.count}`).join(", ") || "—"} />
+            <Metric label="Common flags" value={stats.topFlagCategories.map((f) => `${f.key} (${f.count})`).join(", ") || "—"} />
+          </CardBody>
+        </Card>
+      )}
 
       {/* Evaluation harness */}
       <Card className="mb-6">
@@ -92,6 +116,12 @@ export default function QualityPage() {
                     <td className="px-5 py-3.5">
                       <p className="font-medium text-zinc-900">{s.label}</p>
                       <p className="mt-0.5 line-clamp-1 text-xs text-zinc-400">{s.groundTruthText}</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {s.brailleType && s.brailleType !== "unknown" && <Tag>{s.brailleType.replace(/_/g, " ")}</Tag>}
+                        {s.imageQuality && s.imageQuality !== "unknown" && <Tag>image: {s.imageQuality}</Tag>}
+                        {s.sampleSource && <Tag>{s.sampleSource.replace(/_/g, " ")}</Tag>}
+                        {s.permissionStatus === "not_approved" && <Tag tone="critical">not approved</Tag>}
+                      </div>
                       {s.lastRunAt && (
                         <p className="mt-0.5 text-[11px] text-zinc-400">
                           Run {formatRelative(s.lastRunAt)}
@@ -173,6 +203,23 @@ function accuracyTone(acc: number): string {
   if (acc >= 0.95) return "bg-positive-50 text-positive-700";
   if (acc >= 0.85) return "bg-caution-50 text-caution-700";
   return "bg-critical-50 text-critical-700";
+}
+
+function Tag({ children, tone }: { children: React.ReactNode; tone?: "critical" }) {
+  return (
+    <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ${tone === "critical" ? "bg-critical-50 text-critical-700" : "bg-zinc-100 text-zinc-600"}`}>
+      {children}
+    </span>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="eyebrow font-semibold">{label}</p>
+      <p className="mt-1 text-sm text-zinc-800">{value}</p>
+    </div>
+  );
 }
 
 function Stat({ icon: Icon, label, value, hint }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; hint?: string }) {

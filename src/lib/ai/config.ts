@@ -12,6 +12,9 @@ const DEFAULT_VISION_MODEL = "gpt-4.1";
 const DEFAULT_TEXT_MODEL = "gpt-4.1";
 const DEFAULT_MAX_UPLOAD_MB = 10;
 const DEFAULT_ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "application/pdf"];
+const DEFAULT_BRAILLE_OCR_TIMEOUT_MS = 30000;
+const DEFAULT_LIBLOUIS_TABLE = "en-ueb-g2.ctb";
+const DEFAULT_LIBLOUIS_TIMEOUT_MS = 5000;
 
 function readEnv(name: string): string | undefined {
   const v = process.env[name];
@@ -85,10 +88,31 @@ export function getOpenAiKey(): string | undefined {
 }
 
 /** Server-only Braille OCR endpoint + key. Never expose to the client. */
-export function getBrailleEndpointConfig(): { endpoint?: string; apiKey?: string } {
+export function getBrailleEndpointConfig(): { endpoint?: string; apiKey?: string; timeoutMs: number } {
   return {
     endpoint: readEnv("BRAILLE_OCR_ENDPOINT"),
     apiKey: readEnv("BRAILLE_OCR_API_KEY"),
+    timeoutMs: parsePositiveInt(readEnv("BRAILLE_OCR_TIMEOUT_MS"), DEFAULT_BRAILLE_OCR_TIMEOUT_MS),
+  };
+}
+
+export interface LiblouisConfig {
+  enabled: boolean;
+  command: string | undefined;
+  table: string;
+  timeoutMs: number;
+}
+
+/**
+ * Optional Liblouis back-translation config. Disabled by default so the build never depends
+ * on a native Liblouis binary. Even when enabled, a missing command degrades gracefully.
+ */
+export function getLiblouisConfig(): LiblouisConfig {
+  return {
+    enabled: readEnv("LIBLOUIS_ENABLED") === "true",
+    command: readEnv("LIBLOUIS_COMMAND"),
+    table: readEnv("LIBLOUIS_TABLE") ?? DEFAULT_LIBLOUIS_TABLE,
+    timeoutMs: parsePositiveInt(readEnv("LIBLOUIS_TIMEOUT_MS"), DEFAULT_LIBLOUIS_TIMEOUT_MS),
   };
 }
 

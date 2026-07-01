@@ -6,12 +6,17 @@
  * map them onto the app's existing `LowConfidenceRegion[]` / `AnswerSensitiveFlag[]`
  * shapes so the current UI keeps working without a rewrite.
  */
-import type { AnswerSensitiveFlag, LowConfidenceRegion } from "@/lib/types";
+import type { AnswerSensitiveFlag, LowConfidenceRegion, StoredAiFlag } from "@/lib/types";
 import type {
   UncertaintyCategory,
   UncertaintyFlag,
   UncertaintySeverity,
 } from "./types";
+
+function trim(value: string, max = 300): string {
+  const s = value.trim();
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
 
 let flagCounter = 0;
 function flagId(): string {
@@ -147,7 +152,34 @@ export function mapFlagsToAnswerSensitiveFlags(flags: UncertaintyFlag[]): Answer
   }));
 }
 
-/** One-line summaries for audit/eval records (never contains secrets). */
-export function summariseFlags(flags: UncertaintyFlag[]): string[] {
-  return flags.map((f) => `${f.severity}:${f.category}:${f.text}`);
+/**
+ * Concise, de-duplicated `severity: category` summaries for audit/eval records, e.g.
+ * `high: requires_specialist_review`. Never contains free text, secrets, or payloads.
+ * Capped so a noisy run cannot bloat an audit entry.
+ */
+export function summariseFlags(flags: UncertaintyFlag[], limit = 8): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const f of flags) {
+    const key = `${f.severity}: ${f.category}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * Convert provider uncertainty flags to the durable `StoredAiFlag[]` shape kept on task and
+ * eval records. Text/reason are trimmed so an overlong provider flag cannot bloat storage
+ * or the UI. Preserves severity + category that the simpler UI flag shapes drop.
+ */
+export function toStoredFlags(flags: UncertaintyFlag[], limit = 20): StoredAiFlag[] {
+  return flags.slice(0, limit).map((f) => ({
+    text: trim(f.text),
+    reason: trim(f.reason),
+    category: f.category,
+    severity: f.severity,
+  }));
 }
