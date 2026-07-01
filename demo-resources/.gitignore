@@ -1,0 +1,7 @@
+# Demo/test resources may contain sensitive material — never commit the files
+# themselves. Keep only the folder structure (.gitkeep) and documentation.
+*
+!.gitignore
+!README.md
+!*/
+!**/.gitkeep

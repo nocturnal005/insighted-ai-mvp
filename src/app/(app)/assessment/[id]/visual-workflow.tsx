@@ -5,6 +5,7 @@ import { Loader2, Lock, ShieldAlert, CheckCircle2, EyeOff, XCircle, Ban, Refresh
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExportMenu } from "@/components/export-menu";
 import { AiMeta } from "@/components/ai-meta";
+import { ExportGateHint } from "@/components/gate-hint";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import type { HintTier, VisualDescriptionTask } from "@/lib/types";
 import { updateVisual, updateVisualContext, rerunVisualDescription, approveVisual, rejectVisual } from "../actions";
@@ -212,6 +213,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
                 </div>
               )}
               <div className="flex flex-wrap items-center justify-end gap-2.5">
+                <ExportGateHint className="mr-auto" message="Export locked until approval" />
                 {permissions.canReject && !rejecting && (
                   <button onClick={() => setRejecting(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3.5 text-[13px] text-critical-600 hover:bg-critical-50"><XCircle className="h-3.5 w-3.5" /> Reject</button>
                 )}

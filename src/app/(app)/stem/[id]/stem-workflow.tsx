@@ -5,6 +5,7 @@ import { Loader2, Lock, CheckCircle2, ListChecks, ShieldAlert, RefreshCw } from 
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExportMenu } from "@/components/export-menu";
 import { AiMeta } from "@/components/ai-meta";
+import { ExportGateHint } from "@/components/gate-hint";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import type { DescriptionStyle, StemTask } from "@/lib/types";
 import { restyleStem, rerunStemDescription, updateStem, approveStem } from "../actions";
@@ -112,6 +113,7 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
             </>
           ) : (
             <div className="flex flex-wrap items-center justify-end gap-2.5">
+              <ExportGateHint className="mr-auto" message="Export locked until approval" />
               {permissions.canEdit && (
                 <button onClick={() => run("save", () => updateStem(task.id, text || task.editedDescription))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
               )}

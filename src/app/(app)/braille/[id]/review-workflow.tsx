@@ -9,6 +9,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { TranscriptionBadge } from "@/components/ui/badge";
 import { ExportMenu } from "@/components/export-menu";
 import { AiMeta } from "@/components/ai-meta";
+import { ExportGateHint } from "@/components/gate-hint";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import type { BrailleTask } from "@/lib/types";
 import {
@@ -158,6 +159,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
               </>
             ) : !ended && (
               <div className="flex flex-wrap items-center justify-end gap-2.5">
+                <ExportGateHint className="mr-auto" message="Teacher feedback & export unlock after specialist verification" />
                 {permissions.canEdit && (
                   <button onClick={() => run("save", () => saveTranscription(task.id, text))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save edits</button>
                 )}
@@ -210,6 +212,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
                   </>
                 ) : (
                   <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-zinc-100 pt-4">
+                    <ExportGateHint className="mr-auto" message="Export locked until approval" />
                     <button onClick={() => run("savefb", () => saveFeedback(task.id, comments, learner))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "savefb" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
                     {permissions.canApproveFeedback ? (
                       <button onClick={() => run("approvefb", () => approveFeedback(task.id))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approvefb" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve report</button>

@@ -150,6 +150,7 @@ The evaluation harness (`/quality`) scores the active engine with CER/WER. Sampl
 ```bash
 npm run validate:ai     # AI/OCR behavioural guarantees (provider routing, fallbacks, caps, safety)
 npm run validate:mvp    # workflow/RBAC + AI/OCR presence & no-old-mock-calls checks
+npm run validate:demo   # demo-readiness: demo docs/resources present, gates & wording intact
 npm run typecheck
 npm run build
 ```
@@ -197,6 +198,59 @@ Core product rule: Braille accuracy verification is separate from subject teache
 | Priya Sharma | QTVI | Specialist verification, accessibility approval, audit |
 | Helen Wright | SENCO | Oversight, audit, export, archive |
 | Marcus Bell | Admin | Users, settings, audit, retention/deletion |
+
+## Demo Validation & Client Walkthrough
+
+A structured process for confirming every core feature works end-to-end and for presenting the app to a school/client audience — all in safe demo mode.
+
+> **Demo resources must be synthetic, anonymised, or permission-cleared. Do not use identifiable pupil data or live assessment materials without school approval.**
+
+### Run demo mode
+
+```bash
+npm install
+npm run reset:demo   # clean, deterministic seed data
+npm run dev          # http://localhost:3000
+```
+
+Demo mode is the default (`AI_MODE=mock`, `DEMO_MODE=true`): AI/OCR drafts are offline and deterministic, so a rehearsed walkthrough is stable. No API keys are required.
+
+### Which staff accounts to use
+
+Sign in from the "Select Workspace Profile" front page; each card enters that role's workspace.
+
+| Account | Role | Use it to show |
+| --- | --- | --- |
+| Amelia Stone | Teaching Assistant (Braille-literate) | Upload work, run AI/OCR, and (as Braille-literate) specialist-verify |
+| David Okafor | Teacher | Subject feedback + approval; that a teacher **cannot** verify Braille accuracy |
+| Priya Sharma | QTVI | Specialist Braille verification and accessibility approval |
+| Helen Wright | SENCO | Oversight, audit, export, archive |
+| Marcus Bell | Admin | Users, settings, audit, retention/secure deletion |
+
+### Which features to test
+
+Braille Work Review · AI/OCR draft transcription · specialist verification · teacher feedback · Assessment-Safe visual description · STEM description support · quality evaluation (CER/WER) · audit trail · admin controls · retention/deletion · export approval gates. Each has explicit steps and expected results in the test matrix.
+
+### Where demo resources go
+
+Place synthetic upload files in [`demo-resources/`](demo-resources/README.md) (`braille/`, `visuals/`, `stem/`, `quality/`, `exports/`). The files themselves are **not** committed — a `.gitignore` there keeps only the structure and docs.
+
+### How to use the demo test matrix
+
+Work through [`docs/demo-test-matrix.md`](docs/demo-test-matrix.md) group by group, recording Pass/Fail. It names the exact role, input, steps, and expected result for every feature (including the export/verification gates and the audit checks).
+
+### How to use the client demo script
+
+Follow [`docs/client-demo-script.md`](docs/client-demo-script.md) — a 10–15 minute, role-by-role walkthrough written for school leaders, SENCOs, QTVIs, and assistive-technology stakeholders. Before presenting, run the [`docs/demo-readiness-checklist.md`](docs/demo-readiness-checklist.md) and the validation commands (`typecheck`, `build`, `validate:mvp`, `validate:ai`, `validate:demo`).
+
+Positioning to hold throughout: **InsightEd AI does not replace QTVIs, Braille-literate staff, or teachers. It creates AI/OCR drafts that are reviewed, corrected, approved, and audited by the right staff roles.**
+
+### Known demo limitations
+
+- AI/OCR output is always a **draft**; mock mode is offline/deterministic and is not a substitute for specialist verification.
+- OpenAI vision is **not** a definitive Braille OCR engine — its Braille output is a non-specialist draft requiring QTVI/Braille-literate verification.
+- PDF uploads are stored but not rasterised for OCR in this build (upload a PNG/JPG page for OCR).
+- Sign-in, storage, and hosting are demo-grade; production needs school identity, secure storage, and durable hosting (not started yet).
 
 ## Tech
 
