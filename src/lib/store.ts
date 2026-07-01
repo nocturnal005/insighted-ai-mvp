@@ -39,12 +39,24 @@ const DATA_DIR = join(process.cwd(), ".insighted-data");
 const UPLOAD_DIR = join(DATA_DIR, "uploads");
 const DB_FILE = join(DATA_DIR, "db.json");
 
+// Tracks whether local disk is writable. Serverless hosts (e.g. Vercel) mount a
+// read-only filesystem outside /tmp, so mkdir/write there throws EROFS. Rather than
+// crashing the whole app at import time, we detect that once and fall back to an
+// in-memory-only demo store (state still resets on cold start either way).
+let diskWritable = true;
+
 function ensureDataDirs(): void {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-  if (!existsSync(UPLOAD_DIR)) mkdirSync(UPLOAD_DIR, { recursive: true });
+  if (!diskWritable) return;
+  try {
+    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+    if (!existsSync(UPLOAD_DIR)) mkdirSync(UPLOAD_DIR, { recursive: true });
+  } catch {
+    diskWritable = false;
+  }
 }
 
 function loadPersistedDb(): Db | null {
+  if (!diskWritable) return null;
   try {
     if (!existsSync(DB_FILE)) return null;
     return JSON.parse(readFileSync(DB_FILE, "utf8")) as Db;
@@ -54,11 +66,14 @@ function loadPersistedDb(): Db | null {
 }
 
 function saveDb(): void {
+  if (!diskWritable) return;
   try {
     ensureDataDirs();
+    if (!diskWritable) return;
     writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
   } catch {
     // A production database adapter should fail loudly; the local demo remains usable.
+    diskWritable = false;
   }
 }
 
@@ -287,11 +302,22 @@ export function createUpload(params: {
   data: Buffer;
   uploadedBy: User;
 }): string {
-  ensureDataDirs();
   const uploadId = id("up");
   const safeName = params.fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) || "upload";
   const storagePath = join(UPLOAD_DIR, `${uploadId}-${safeName}`);
-  writeFileSync(storagePath, params.data);
+
+  let wroteToDisk = false;
+  if (diskWritable) {
+    try {
+      ensureDataDirs();
+      if (diskWritable) {
+        writeFileSync(storagePath, params.data);
+        wroteToDisk = true;
+      }
+    } catch {
+      diskWritable = false;
+    }
+  }
 
   const upload: Upload = {
     id: uploadId,
@@ -301,7 +327,9 @@ export function createUpload(params: {
     fileName: params.fileName,
     fileType: params.fileType,
     byteSize: params.byteSize,
-    storagePath,
+    // On a read-only filesystem (e.g. Vercel), keep the bytes in memory instead of on disk.
+    storagePath: wroteToDisk ? storagePath : "",
+    dataUrl: wroteToDisk ? undefined : `data:${params.fileType};base64,${params.data.toString("base64")}`,
     uploadedBy: params.uploadedBy.id,
     createdAt: new Date().toISOString(),
   };
@@ -367,7 +395,7 @@ export function purgeExpiredUploads(retentionDays: number): Upload[] {
 
   for (const upload of expired) {
     try {
-      if (existsSync(upload.storagePath)) unlinkSync(upload.storagePath);
+      if (upload.storagePath && existsSync(upload.storagePath)) unlinkSync(upload.storagePath);
     } catch {
       // Continue purging metadata so the UI no longer exposes expired material.
     }
