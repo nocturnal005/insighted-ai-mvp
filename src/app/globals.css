@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -45,5 +47,13 @@
   .input {
     @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900
       placeholder:text-zinc-400 focus:border-accent-500;
+  }
+
+  /* Landing-page display fonts (scoped to the front page — see login/page.tsx). */
+  .font-display {
+    font-family: "Libre Caslon Text", Georgia, "Times New Roman", serif;
+  }
+  .font-hyperlegible {
+    font-family: "Atkinson Hyperlegible Next", var(--font-inter), system-ui, sans-serif;
   }
 }
