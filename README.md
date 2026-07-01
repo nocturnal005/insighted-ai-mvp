@@ -2,7 +2,9 @@
 
 > Secure, human-verified accessibility workflow for visual impairment education teams.
 
-InsightEd AI is a controlled-demo and pilot-readiness MVP for mainstream secondary school VI support workflows. It keeps demo resources and mock AI services, but the workflow mechanics are functional: role checks, specialist verification, teacher feedback approval, audit logging, exports, local persistence, upload metadata, and retention deletion.
+InsightEd AI is a controlled-demo and pilot-readiness MVP for mainstream secondary school VI support workflows. The workflow mechanics are functional: role checks, specialist verification, teacher feedback approval, audit logging, exports, local persistence, upload metadata, and retention deletion.
+
+The AI/OCR layer is now provider-based. It ships with a safe, offline **mock mode** for demos and a **real mode** that can call OpenAI vision (for visual/STEM descriptions and a clearly-labelled non-specialist Braille draft) or an external Braille OCR endpoint. Every AI output is a draft carrying provider/model/confidence/uncertainty metadata, and Braille accuracy always requires specialist verification before teacher feedback or export.
 
 ## Run It
 
@@ -18,13 +20,99 @@ Open http://localhost:3000.
 
 ## MVP Mode
 
-This MVP is designed for controlled demonstration and validation. It uses human-in-the-loop review for all AI outputs. It must not be used with identifiable pupil data or live assessment material until proper school approval, safeguarding checks, data protection review, and production security arrangements are completed.
+This MVP is designed for controlled demonstration and validation. It uses human-in-the-loop review for all AI outputs.
 
-Environment variables:
+> This MVP produces AI/OCR drafts only. It must not be used with identifiable pupil data, live assessment materials, or school production workflows until data protection, safeguarding, authentication, storage, and specialist verification arrangements are approved.
+
+### Environment variables
+
+Copy `.env.example` to `.env` and adjust. Missing keys never crash the app — an unconfigured real provider returns a controlled "provider unavailable" draft instead.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DEMO_MODE` | `true` unless set to `false` | Enables the local staff-picker login. Set `DEMO_MODE=false` before wiring Supabase Auth or another identity provider. |
+| `DEMO_MODE` | `true` | Enables the local staff-picker login. Set `DEMO_MODE=false` before wiring Supabase Auth or another identity provider. |
+| `AI_MODE` | `mock` | `mock` uses safe offline providers. `real` uses configured real providers. |
+| `AI_PROVIDER` | `openai` | Real vision/text provider (currently `openai`). Invalid values fall back to mock. |
+| `OPENAI_API_KEY` | _(empty)_ | Server-only OpenAI key. Never logged, shown, or audited. |
+| `OPENAI_VISION_MODEL` | `gpt-4.1` | Vision model for visual/STEM/Braille-draft. |
+| `OPENAI_TEXT_MODEL` | `gpt-4.1` | Text model (reserved for future text-only steps). |
+| `BRAILLE_OCR_PROVIDER` | `mock` | `mock` \| `openai_vision_draft` \| `external_braille_ocr`. |
+| `BRAILLE_OCR_ENDPOINT` | _(empty)_ | HTTPS endpoint for the external Braille OCR adapter. |
+| `BRAILLE_OCR_API_KEY` | _(empty)_ | Server-only bearer token for that endpoint. |
+| `MAX_UPLOAD_MB` | `10` | Upload size cap enforced in preprocessing. |
+| `ALLOWED_UPLOAD_TYPES` | `image/png,image/jpeg,image/jpg,application/pdf` | Accepted upload MIME types. |
+| `ALLOW_REAL_PUPIL_DATA` | `false` | Safety flag; keep `false` for demos/pilots. |
+
+### Run in mock mode (default, no keys)
+
+```env
+AI_MODE=mock
+```
+
+Deterministic, offline drafts. Braille still requires specialist verification; nothing is presented as final. This is the safe demo path.
+
+### Run in real OpenAI mode
+
+```env
+AI_MODE=real
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+BRAILLE_OCR_PROVIDER=openai_vision_draft
+```
+
+Visual and STEM descriptions and the Braille draft are generated from the uploaded image. OpenAI Braille output is explicitly a **non-specialist draft**, uses conservative confidence, and always requires QTVI/Braille-literate verification. On any provider or JSON-validation failure the app returns a controlled fallback draft with a high-severity flag — raw provider errors and secrets are never surfaced.
+
+## AI/OCR Provider Architecture
+
+All AI/OCR lives behind `src/lib/ai/` and is reached through three functions in `src/lib/ai/index.ts`:
+
+```ts
+transcribeBraille(input)     // Braille OCR draft (always needs specialist verification)
+describeVisual(input)        // Assessment-safe neutral description
+describeStemVisual(input)    // Structured STEM description
+```
+
+Pipeline per call: config resolution → image preprocessing (`sharp`) → provider dispatch → `zod` validation of provider JSON → confidence scoring → uncertainty flags → provenance metadata (provider, model, prompt version, mode, processing time) → audit log.
+
+Providers under `src/lib/ai/providers/`:
+
+* **mock-provider** — deterministic offline drafts for every capability; powers demo mode.
+* **openai-vision-provider** — OpenAI vision for visual/STEM descriptions and a labelled non-specialist Braille draft (`visual-description-v1`, `stem-description-v1`, `braille-openai-draft-v1`).
+* **external-braille-provider** — adapter for a specialist Braille OCR HTTP engine.
+* **braille-translation-provider** — Liblouis-ready back-translation interface (optional; stubbed).
+
+### External Braille OCR endpoint contract
+
+When `BRAILLE_OCR_PROVIDER=external_braille_ocr`, the adapter POSTs to `BRAILLE_OCR_ENDPOINT` (with `Authorization: Bearer <BRAILLE_OCR_API_KEY>` if set):
+
+Request:
+
+```json
+{ "taskId": "…", "title": "…", "fileName": "…", "mimeType": "…", "dataUrl": "…", "subject": "… | null", "yearGroup": "… | null" }
+```
+
+Response (validated with `zod`):
+
+```json
+{
+  "draftText": "…",
+  "confidence": 0.82,
+  "rawBraille": "optional unicode braille",
+  "rawCells": [],
+  "flags": [{ "text": "…", "reason": "…", "category": "unclear_braille_cell", "severity": "medium" }],
+  "pageResults": []
+}
+```
+
+A missing endpoint returns a `provider_unavailable` draft; a failed call returns a `processing_failed` draft. Both still require specialist verification.
+
+### Liblouis-ready back-translation
+
+`braille-translation-provider.ts` defines a clean `BrailleTranslationProvider` interface for converting detected Braille (Unicode dot patterns or cell arrays) **into** print text. This is back-translation that runs **after** a dot/cell-detection OCR stage — it is **not** an image OCR engine and cannot read a photograph on its own. Liblouis is intentionally optional: the shipped stub reports `provider_unavailable`, so the build never depends on a native Liblouis binding or on Duxbury. Swap the stub for a real Liblouis CLI/binding without changing any caller.
+
+### Quality evaluation
+
+The evaluation harness (`/quality`) scores the active engine with CER/WER. Samples **with** an image are sent through `transcribeBraille` (respecting `AI_MODE` and the configured Braille provider) and record provider/model/confidence/flags. Text-only samples fall back to deterministic mock simulation and are labelled `mock` so they are never mistaken for a real OCR measurement. Every staff verification also captures an (AI draft → verified final) correction pair — free labelled data for measuring and later fine-tuning a real engine.
 
 Local persistence:
 
@@ -94,21 +182,35 @@ src/
       admin/
   components/
   lib/
+    ai/               provider-based AI/OCR service layer
+      index.ts        public API: transcribeBraille / describeVisual / describeStemVisual
+      config.ts       env-driven config (mock/real, models, upload limits)
+      types.ts        provider contract + uncertainty/metadata types
+      preprocessing.ts sharp image normalisation
+      prompts.ts      prompt text + version strings
+      confidence.ts   confidence scoring
+      uncertainty.ts  uncertainty-flag helpers + mappers
+      safety.ts       error-scrubbing + assessment-context checks
+      providers/      mock / openai-vision / external-braille / braille-translation
     store.ts          local demo persistence and seed data
     session.ts        auth boundary and DEMO_MODE switch
     rbac.ts           roles and permissions
-    braille-engine.ts mock transcription/description engine
+    braille-engine.ts legacy mock data (visual-type labels/structures)
     feedback.ts       feedback draft heuristics
     export-content.ts export document builder
 ```
 
 ## Scaling Path
 
-Replace `store.ts` with Supabase/Postgres plus Row Level Security, replace local upload storage with Supabase Storage or Vercel Blob, replace `session.ts` internals with Supabase Auth or OIDC, and replace `braille-engine.ts` with a real OCR/vision provider. Keep the workflow, RBAC, audit, and approval model.
+Replace `store.ts` with Supabase/Postgres plus Row Level Security, replace local upload storage with Supabase Storage or Vercel Blob, and replace `session.ts` internals with Supabase Auth or OIDC. The AI/OCR layer is already provider-based under `src/lib/ai/` — add a specialist Braille OCR engine behind the external adapter and a Liblouis binding behind the back-translation interface without touching product logic. Keep the workflow, RBAC, audit, and approval model.
 
 ## Current Limitations
 
-* AI services are mock/heuristic and must remain labelled as draft output.
+* AI/OCR output is always a draft. Mock mode is offline/deterministic; real mode calls the configured provider. Neither is a substitute for specialist verification.
+* OpenAI vision is **not** a definitive Braille OCR engine. Its Braille output is a non-specialist draft only and must be verified by a QTVI or Braille-literate specialist.
+* True specialist Braille OCR requires an external engine (via the `external_braille_ocr` adapter) or a dedicated dot/cell-detection pipeline; none is bundled.
+* Liblouis back-translation is optional and stubbed — it runs after cell detection, not on images, and is not required for the build.
+* PDF uploads are stored but not rasterised for OCR in this build; they return a high-severity `pdf_processing_pending` flag. Upload a PNG/JPG page image for OCR.
 * Local file persistence is suitable for demos, not serverless production durability.
 * `DEMO_MODE=false` disables the staff picker but still needs a real auth provider implementation.
 * npm audit on 30 June 2026 still recommends a breaking Next 16 migration for remaining advisories; this branch conservatively patches the app to Next 14.2.35.

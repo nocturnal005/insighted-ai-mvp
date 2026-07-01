@@ -4,6 +4,7 @@ import { Gauge, Plus, Play, Database, Trash2, FlaskConical } from "lucide-react"
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { getCorrections, getEvalSamples, getQualityStats } from "@/lib/data";
+import { getAiConfig } from "@/lib/ai";
 import { pct } from "@/lib/metrics";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
@@ -17,6 +18,7 @@ export default function QualityPage() {
   const stats = getQualityStats();
   const corrections = getCorrections();
   const samples = getEvalSamples();
+  const ai = getAiConfig();
 
   return (
     <>
@@ -25,14 +27,23 @@ export default function QualityPage() {
         description="Measure transcription accuracy and capture every staff correction as labelled data."
       />
 
-      {/* Engine banner */}
+      {/* Engine banner — reflects the live AI configuration */}
       <div className="mb-6 flex items-start gap-2.5 rounded-xl border border-accent-100 bg-accent-50/50 px-4 py-3 text-sm text-accent-700">
         <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>
-          Active engine: <span className="font-medium">mock-v1 (simulated)</span>. Numbers below are
-          illustrative until a real Braille OCR engine is wired — at which point the harness scores it
-          unchanged.
-        </span>
+        {ai.mode === "real" ? (
+          <span>
+            AI mode: <span className="font-medium">real</span>. Braille OCR provider{" "}
+            <span className="font-medium">{ai.brailleOcrProvider}</span> (model {ai.visionModel}). Samples
+            with an image are scored against this provider; text-only samples fall back to labelled mock
+            simulation.
+          </span>
+        ) : (
+          <span>
+            AI mode: <span className="font-medium">mock</span> (mock-v1, simulated). Numbers below are
+            illustrative for the demo. Set <span className="font-medium">AI_MODE=real</span> with a
+            configured provider to score a real Braille OCR engine — the harness is unchanged.
+          </span>
+        )}
       </div>
 
       {/* Overview */}
@@ -81,7 +92,13 @@ export default function QualityPage() {
                     <td className="px-5 py-3.5">
                       <p className="font-medium text-zinc-900">{s.label}</p>
                       <p className="mt-0.5 line-clamp-1 text-xs text-zinc-400">{s.groundTruthText}</p>
-                      {s.lastRunAt && <p className="mt-0.5 text-[11px] text-zinc-400">Run {formatRelative(s.lastRunAt)}</p>}
+                      {s.lastRunAt && (
+                        <p className="mt-0.5 text-[11px] text-zinc-400">
+                          Run {formatRelative(s.lastRunAt)}
+                          {s.provider ? ` · ${s.aiMode ?? "?"} · ${s.provider}/${s.model ?? "?"}` : ""}
+                          {s.confidence != null ? ` · ${Math.round(s.confidence * 100)}% conf` : ""}
+                        </p>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 tabular-nums text-zinc-700">{pct(s.cer)}</td>
                     <td className="px-5 py-3.5 tabular-nums text-zinc-700">{pct(s.wer)}</td>

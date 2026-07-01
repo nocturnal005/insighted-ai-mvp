@@ -6,6 +6,9 @@ import type { AuditEntry } from "@/lib/types";
 const ACTION_LABEL: Record<string, string> = {
   "task.create": "Task created",
   "upload.create": "File uploaded",
+  "ai.braille_ocr.run": "AI/OCR Braille draft generated",
+  "ai.visual_description.run": "AI visual description generated",
+  "ai.stem_description.run": "AI STEM description generated",
   "transcription.draft": "AI draft generated",
   "transcription.edit": "Transcription edited",
   "transcription.specialist_verify": "Specialist verification completed",
@@ -54,6 +57,14 @@ export function TaskTimeline({ entries }: { entries: AuditEntry[] }) {
                     {entry.previousStatus && entry.newStatus ? ` - ${entry.previousStatus} to ${entry.newStatus}` : ""}
                     {entry.reason ? ` - ${entry.reason}` : ""}
                   </p>
+                  {entry.provider && (
+                    <p className="mt-0.5 text-[11px] text-zinc-400">
+                      {entry.aiMode ?? "?"} · {entry.provider}
+                      {entry.model ? `/${entry.model}` : ""}
+                      {entry.confidence != null ? ` · ${Math.round(entry.confidence * 100)}% conf` : ""}
+                      {entry.processingMs != null ? ` · ${entry.processingMs}ms` : ""}
+                    </p>
+                  )}
                 </div>
                 <span className="shrink-0 text-xs text-zinc-400">{formatRelative(entry.createdAt)}</span>
               </li>

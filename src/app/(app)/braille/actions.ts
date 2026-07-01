@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
-import { db, id, recordAudit, createUpload, recordCorrection } from "@/lib/store";
-import { getBrailleTask } from "@/lib/data";
-import { getBrailleEngine } from "@/lib/braille-engine";
+import { db, id, recordAudit, createUpload, recordCorrection, uploadDataUrl } from "@/lib/store";
+import { getBrailleTask, getTaskUpload, getPupil } from "@/lib/data";
+import { transcribeBraille, mapFlagsToLowConfidenceRegions } from "@/lib/ai";
 import { generateFeedback } from "@/lib/feedback";
 import type { BrailleTask } from "@/lib/types";
 
@@ -81,21 +81,44 @@ export async function runTranscription(taskId: string) {
   if (!task) throw new Error("Task not found");
 
   const previousStatus = task.status;
-  const result = await getBrailleEngine().transcribe(task.id);
+
+  // Feed the uploaded image (as a data URL) into the AI/OCR service — never just the title.
+  const upload = getTaskUpload(task.id);
+  const dataUrl = upload ? uploadDataUrl(upload) : undefined;
+  const pupil = task.pupilId ? getPupil(task.pupilId) : undefined;
+
+  const result = await transcribeBraille({
+    taskId: task.id,
+    title: task.title,
+    fileName: upload?.fileName,
+    mimeType: upload?.fileType,
+    dataUrl: dataUrl || undefined,
+    subject: task.subject,
+    yearGroup: pupil?.yearGroup ?? null,
+  });
+
+  const regions = mapFlagsToLowConfidenceRegions(result.flags);
   task.transcription = {
-    draftText: result.text,
-    editedText: result.text,
+    draftText: result.draftText,
+    editedText: result.draftText,
     finalText: null,
     status: "needs_specialist_review",
     confidence: result.confidence,
-    lowConfidenceRegions: result.lowConfidenceRegions,
-    engine: result.engine,
+    lowConfidenceRegions: regions,
+    engine: result.meta.model,
     specialistVerifiedBy: null,
     specialistVerifiedAt: null,
     specialistNotes: "",
-    brailleAccuracyFindings: result.lowConfidenceRegions.map((r) => `${r.text}: ${r.reason}`),
+    brailleAccuracyFindings: result.flags
+      .filter((f) => f.category !== "requires_specialist_review")
+      .map((f) => `${f.text}: ${f.reason}`),
     subjectTeacherReviewedBy: null,
     subjectTeacherReviewedAt: null,
+    aiProvider: result.meta.provider,
+    aiModel: result.meta.model,
+    aiMode: result.meta.mode,
+    promptVersion: result.meta.promptVersion,
+    processingMs: result.meta.processingMs,
   };
   task.status = "needs_specialist_review";
   task.updatedAt = new Date().toISOString();
@@ -103,12 +126,17 @@ export async function runTranscription(taskId: string) {
     actorId: user.id,
     actorName: user.fullName,
     actorRole: user.role,
-    action: "transcription.draft",
+    action: "ai.braille_ocr.run",
     objectType: "Braille review",
     objectLabel: task.title,
     taskId: task.id,
     previousStatus,
     newStatus: task.status,
+    provider: result.meta.provider,
+    model: result.meta.model,
+    confidence: result.confidence,
+    processingMs: result.meta.processingMs,
+    aiMode: result.meta.mode,
   });
   revalidatePath(`/braille/${taskId}`);
 }

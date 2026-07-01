@@ -67,6 +67,12 @@ export interface Transcription {
   subjectTeacherReviewedAt: string | null;
   verifiedBy?: string | null;
   verifiedAt?: string | null;
+  // AI/OCR run provenance (optional so pre-existing seeded records stay valid).
+  aiProvider?: string | null;
+  aiModel?: string | null;
+  aiMode?: "mock" | "real" | null;
+  promptVersion?: string | null;
+  processingMs?: number | null;
 }
 
 export interface FeedbackFindings {
@@ -150,6 +156,13 @@ export interface VisualDescriptionTask {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  // AI run provenance (optional for seed compatibility).
+  aiProvider?: string | null;
+  aiModel?: string | null;
+  aiMode?: "mock" | "real" | null;
+  confidence?: number | null;
+  promptVersion?: string | null;
+  processingMs?: number | null;
 }
 
 export interface StemTask {
@@ -173,6 +186,13 @@ export interface StemTask {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  // AI run provenance (optional for seed compatibility).
+  aiProvider?: string | null;
+  aiModel?: string | null;
+  aiMode?: "mock" | "real" | null;
+  confidence?: number | null;
+  promptVersion?: string | null;
+  processingMs?: number | null;
 }
 
 export interface Upload {
@@ -222,6 +242,12 @@ export interface EvalSample {
   lastRunAt: string | null;
   createdByName: string;
   createdAt: string;
+  // Which engine produced the last prediction (optional for seed compatibility).
+  provider?: string | null;
+  model?: string | null;
+  confidence?: number | null;
+  aiMode?: "mock" | "real" | null;
+  flagSummary?: string[] | null;
 }
 
 export interface AuditEntry {
@@ -238,4 +264,10 @@ export interface AuditEntry {
   newStatus?: string | null;
   reason?: string | null;
   createdAt: string;
+  // AI/OCR run provenance for `ai.*` and `eval.*` actions (optional otherwise).
+  provider?: string | null;
+  model?: string | null;
+  confidence?: number | null;
+  processingMs?: number | null;
+  aiMode?: "mock" | "real" | null;
 }

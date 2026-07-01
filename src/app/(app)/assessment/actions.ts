@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { db, id, recordAudit, createUpload } from "@/lib/store";
 import { getVisualTask } from "@/lib/data";
-import { draftVisualDescription } from "@/lib/braille-engine";
+import { describeVisual, mapFlagsToAnswerSensitiveFlags } from "@/lib/ai";
 import type { HintTier, VisualDescriptionTask } from "@/lib/types";
 
 const ALLOWED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "application/pdf"]);
@@ -31,7 +31,6 @@ export async function createVisualTask(formData: FormData) {
   const file = formData.get("image") as File | null;
   if (!title) throw new Error("Title is required");
 
-  const { description, flags } = draftVisualDescription(title);
   const now = new Date().toISOString();
   const task: VisualDescriptionTask = {
     id: id("vd"),
@@ -39,25 +38,18 @@ export async function createVisualTask(formData: FormData) {
     title, subject, yearGroup, pupilId, context, questionPrompt, assessedSkill,
     hintTier: "tier_0",
     uploadId: null,
-    draftDescription: description,
-    editedDescription: description,
-    answerSensitiveFlags: flags,
+    draftDescription: "",
+    editedDescription: "",
+    answerSensitiveFlags: [],
     status: "draft",
     approvedBy: null, approvedAt: null, rejectionReason: null, exportedAt: null,
     createdBy: user.id, createdAt: now, updatedAt: now,
+    aiProvider: null, aiModel: null, aiMode: null, confidence: null, promptVersion: null, processingMs: null,
   };
   db.visualTasks.unshift(task);
-  recordAudit({
-    actorId: user.id,
-    actorName: user.fullName,
-    actorRole: user.role,
-    action: "visual.draft",
-    objectType: "Visual description",
-    objectLabel: title,
-    taskId: task.id,
-    newStatus: task.status,
-  });
 
+  // Store the upload (if any) and capture its bytes to feed the vision provider.
+  let dataUrl: string | undefined;
   if (file && file.size > 0) {
     assertValidUpload(file);
     const buf = Buffer.from(await file.arrayBuffer());
@@ -65,7 +57,48 @@ export async function createVisualTask(formData: FormData) {
       taskId: task.id, module: "visual", fileName: file.name, fileType: file.type,
       byteSize: file.size, data: buf, uploadedBy: user,
     });
+    dataUrl = `data:${file.type};base64,${buf.toString("base64")}`;
   }
+
+  // Generate the neutral, assessment-safe description from the image + assessment context.
+  const result = await describeVisual({
+    taskId: task.id,
+    title: task.title,
+    subject: task.subject,
+    yearGroup: task.yearGroup,
+    context: task.context,
+    hintTier: task.hintTier,
+    questionPrompt: task.questionPrompt,
+    assessedSkill: task.assessedSkill,
+    dataUrl,
+  });
+
+  task.draftDescription = result.neutralDescription;
+  task.editedDescription = result.neutralDescription;
+  task.answerSensitiveFlags = mapFlagsToAnswerSensitiveFlags(result.answerSensitiveFlags);
+  task.aiProvider = result.meta.provider;
+  task.aiModel = result.meta.model;
+  task.aiMode = result.meta.mode;
+  task.confidence = result.confidence;
+  task.promptVersion = result.meta.promptVersion;
+  task.processingMs = result.meta.processingMs;
+  task.updatedAt = new Date().toISOString();
+
+  recordAudit({
+    actorId: user.id,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "ai.visual_description.run",
+    objectType: "Visual description",
+    objectLabel: title,
+    taskId: task.id,
+    newStatus: task.status,
+    provider: result.meta.provider,
+    model: result.meta.model,
+    confidence: result.confidence,
+    processingMs: result.meta.processingMs,
+    aiMode: result.meta.mode,
+  });
 
   redirect(`/assessment/${task.id}`);
 }

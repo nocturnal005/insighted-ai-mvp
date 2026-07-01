@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
-import { db, id, recordAudit, createUpload } from "@/lib/store";
-import { getStemTask } from "@/lib/data";
-import { draftStemDescription } from "@/lib/braille-engine";
+import { db, id, recordAudit, createUpload, uploadDataUrl } from "@/lib/store";
+import { getStemTask, getTaskUpload } from "@/lib/data";
+import { describeStemVisual, mapFlagsToAnswerSensitiveFlags } from "@/lib/ai";
 import type { DescriptionStyle, StemTask, VisualType } from "@/lib/types";
 
 const ALLOWED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "application/pdf"]);
@@ -30,32 +30,24 @@ export async function createStemTask(formData: FormData) {
   const file = formData.get("image") as File | null;
   if (!title) throw new Error("Title is required");
 
-  const { description, flags } = draftStemDescription(visualType, style);
   const now = new Date().toISOString();
   const task: StemTask = {
     id: id("st"),
     organisationId: user.organisationId,
     title, subject, yearGroup, pupilId, visualType, style,
     uploadId: null,
-    draftDescription: description,
-    editedDescription: description,
-    answerSensitiveFlags: flags,
+    draftDescription: "",
+    editedDescription: "",
+    answerSensitiveFlags: [],
     status: "draft",
     approvedBy: null, approvedAt: null, rejectionReason: null, exportedAt: null,
     createdBy: user.id, createdAt: now, updatedAt: now,
+    aiProvider: null, aiModel: null, aiMode: null, confidence: null, promptVersion: null, processingMs: null,
   };
   db.stemTasks.unshift(task);
-  recordAudit({
-    actorId: user.id,
-    actorName: user.fullName,
-    actorRole: user.role,
-    action: "stem.draft",
-    objectType: "STEM description",
-    objectLabel: title,
-    taskId: task.id,
-    newStatus: task.status,
-  });
 
+  // Store the upload (if any) and capture its bytes to feed the vision provider.
+  let dataUrl: string | undefined;
   if (file && file.size > 0) {
     assertValidUpload(file);
     const buf = Buffer.from(await file.arrayBuffer());
@@ -63,7 +55,46 @@ export async function createStemTask(formData: FormData) {
       taskId: task.id, module: "stem", fileName: file.name, fileType: file.type,
       byteSize: file.size, data: buf, uploadedBy: user,
     });
+    dataUrl = `data:${file.type};base64,${buf.toString("base64")}`;
   }
+
+  const result = await describeStemVisual({
+    taskId: task.id,
+    title: task.title,
+    subject: task.subject,
+    yearGroup: task.yearGroup,
+    context: "lesson",
+    visualType: task.visualType,
+    style: task.style,
+    dataUrl,
+  });
+
+  task.draftDescription = result.structuredDescription;
+  task.editedDescription = result.structuredDescription;
+  task.answerSensitiveFlags = mapFlagsToAnswerSensitiveFlags(result.answerSensitiveFlags);
+  task.aiProvider = result.meta.provider;
+  task.aiModel = result.meta.model;
+  task.aiMode = result.meta.mode;
+  task.confidence = result.confidence;
+  task.promptVersion = result.meta.promptVersion;
+  task.processingMs = result.meta.processingMs;
+  task.updatedAt = new Date().toISOString();
+
+  recordAudit({
+    actorId: user.id,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "ai.stem_description.run",
+    objectType: "STEM description",
+    objectLabel: title,
+    taskId: task.id,
+    newStatus: task.status,
+    provider: result.meta.provider,
+    model: result.meta.model,
+    confidence: result.confidence,
+    processingMs: result.meta.processingMs,
+    aiMode: result.meta.mode,
+  });
 
   redirect(`/stem/${task.id}`);
 }
@@ -76,20 +107,45 @@ export async function restyleStem(taskId: string, style: DescriptionStyle) {
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked");
 
-  const { description, flags } = draftStemDescription(task.visualType, style);
+  // Reuse the same uploaded image; re-run the vision provider with the new style.
+  const upload = getTaskUpload(task.id);
+  const dataUrl = upload ? uploadDataUrl(upload) : undefined;
+
+  const result = await describeStemVisual({
+    taskId: task.id,
+    title: task.title,
+    subject: task.subject,
+    yearGroup: task.yearGroup,
+    context: "lesson",
+    visualType: task.visualType,
+    style,
+    dataUrl: dataUrl || undefined,
+  });
+
   task.style = style;
-  task.draftDescription = description;
-  task.editedDescription = description;
-  task.answerSensitiveFlags = flags;
+  task.draftDescription = result.structuredDescription;
+  task.editedDescription = result.structuredDescription;
+  task.answerSensitiveFlags = mapFlagsToAnswerSensitiveFlags(result.answerSensitiveFlags);
+  task.aiProvider = result.meta.provider;
+  task.aiModel = result.meta.model;
+  task.aiMode = result.meta.mode;
+  task.confidence = result.confidence;
+  task.promptVersion = result.meta.promptVersion;
+  task.processingMs = result.meta.processingMs;
   task.updatedAt = new Date().toISOString();
   recordAudit({
     actorId: user.id,
     actorName: user.fullName,
     actorRole: user.role,
-    action: "stem.restyle",
+    action: "ai.stem_description.run",
     objectType: "STEM description",
     objectLabel: task.title,
     taskId: task.id,
+    provider: result.meta.provider,
+    model: result.meta.model,
+    confidence: result.confidence,
+    processingMs: result.meta.processingMs,
+    aiMode: result.meta.mode,
   });
   revalidatePath(`/stem/${taskId}`);
 }
