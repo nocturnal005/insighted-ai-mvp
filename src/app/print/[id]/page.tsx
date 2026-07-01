@@ -30,7 +30,7 @@ export default function PrintPage({
     );
   }
 
-  markExported(kind, params.id, user, doc.title);
+  markExported(kind, params.id, user, doc.title, false);
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10 print:py-0">

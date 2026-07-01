@@ -6,7 +6,9 @@ export type Permission =
   | "task.reject"
   | "task.archive"
   | "transcription.edit"
-  | "transcription.verify"
+  | "transcription.specialist_verify"
+  | "transcription.request_review"
+  | "description.edit"
   | "feedback.generate"
   | "feedback.approve"
   | "visual.approve"
@@ -20,7 +22,7 @@ const VERIFIER: Permission[] = [
   "task.reject",
   "task.archive",
   "transcription.edit",
-  "transcription.verify",
+  "transcription.request_review",
   "feedback.generate",
   "feedback.approve",
   "visual.approve",
@@ -29,14 +31,17 @@ const VERIFIER: Permission[] = [
 ];
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  teaching_assistant: ["task.create", "transcription.edit", "export"],
-  teacher: VERIFIER,
-  qtvi: [...VERIFIER, "audit.read"],
+  teaching_assistant: ["task.create", "transcription.edit", "transcription.request_review", "description.edit"],
+  teacher: ["task.create", "description.edit", "feedback.generate", "feedback.approve", "visual.approve", "stem.approve", "export"],
+  qtvi: [...VERIFIER, "transcription.specialist_verify", "description.edit", "audit.read"],
   senco: ["task.create", "task.archive", "audit.read", "export"],
-  admin: [...VERIFIER, "audit.read", "org.manage"],
+  admin: [...VERIFIER, "transcription.specialist_verify", "description.edit", "audit.read", "org.manage"],
 };
 
-export function can(role: UserRole, permission: Permission): boolean {
+export function can(role: UserRole, permission: Permission, options?: { brailleLiterate?: boolean }): boolean {
+  if (permission === "transcription.specialist_verify" && role === "teaching_assistant") {
+    return options?.brailleLiterate === true;
+  }
   return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
 }
 
@@ -50,7 +55,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 
 export const ROLE_BLURB: Record<UserRole, string> = {
   teaching_assistant: "Uploads work, prepares drafts",
-  teacher: "Verifies & marks, approves feedback",
+  teacher: "Reviews verified English work and approves subject feedback",
   qtvi: "Specialist review & approval",
   senco: "Oversight, audit & reporting",
   admin: "Manages users & settings",

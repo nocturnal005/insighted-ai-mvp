@@ -2,10 +2,24 @@
 
 export type UserRole = "teaching_assistant" | "teacher" | "qtvi" | "senco" | "admin";
 
-export type TaskStatus = "draft" | "needs_review" | "approved" | "rejected" | "archived";
-export type TranscriptionStatus = "draft" | "verified";
+export type TaskStatus =
+  | "draft"
+  | "ready_for_transcription"
+  | "needs_review"
+  | "needs_specialist_review"
+  | "specialist_verified"
+  | "teacher_review"
+  | "approved"
+  | "returned_for_correction"
+  | "rejected"
+  | "archived";
+export type TranscriptionStatus =
+  | "draft"
+  | "needs_specialist_review"
+  | "specialist_verified"
+  | "returned_for_correction";
 export type HintTier = "tier_0" | "tier_1" | "tier_2";
-export type ApprovalStatus = "draft" | "approved";
+export type ApprovalStatus = "draft" | "teacher_review" | "approved";
 export type VisualType =
   | "line_graph"
   | "bar_chart"
@@ -21,6 +35,7 @@ export interface User {
   fullName: string;
   role: UserRole;
   email: string;
+  brailleLiterate?: boolean;
 }
 
 export interface Pupil {
@@ -44,8 +59,14 @@ export interface Transcription {
   confidence: number;
   lowConfidenceRegions: LowConfidenceRegion[];
   engine: string;
-  verifiedBy: string | null;
-  verifiedAt: string | null;
+  specialistVerifiedBy: string | null;
+  specialistVerifiedAt: string | null;
+  specialistNotes: string;
+  brailleAccuracyFindings: string[];
+  subjectTeacherReviewedBy: string | null;
+  subjectTeacherReviewedAt: string | null;
+  verifiedBy?: string | null;
+  verifiedAt?: string | null;
 }
 
 export interface FeedbackFindings {
@@ -58,11 +79,17 @@ export interface FeedbackFindings {
 export interface FeedbackReport {
   summary: string;
   findings: FeedbackFindings;
+  specialistNotes: string;
+  subjectFeedback: string;
   teacherComments: string; // editable, AI-suggested then staff-owned
   learnerSummary: string; // short, learner-friendly
+  reviewWarnings: string[];
+  approvedFinalComments: string | null;
   status: ApprovalStatus;
   approvedBy: string | null;
   approvedAt: string | null;
+  teacherReviewedBy: string | null;
+  teacherReviewedAt: string | null;
   createdAt: string;
 }
 
@@ -87,6 +114,15 @@ export interface BrailleTask {
 export interface AnswerSensitiveFlag {
   text: string;
   reason: string;
+  type?:
+    | "trend_revealed"
+    | "comparison_revealed"
+    | "answer_value_revealed"
+    | "label_reveals_answer"
+    | "visual_emphasis_reveals_answer"
+    | "relationship_interpreted"
+    | "cause_effect_implied"
+    | "unnecessary_clue";
 }
 
 export interface VisualDescriptionTask {
@@ -96,7 +132,11 @@ export interface VisualDescriptionTask {
   subject: string | null;
   yearGroup: string | null;
   pupilId: string | null;
-  context: "lesson" | "assessment";
+  context: "lesson" | "class_test" | "mock_assessment" | "formal_assessment_preparation" | "assessment";
+  visualType?: VisualType;
+  questionPrompt?: string | null;
+  assessedSkill?: string | null;
+  redactions?: string[];
   hintTier: HintTier;
   uploadId: string | null;
   draftDescription: string;
@@ -143,7 +183,8 @@ export interface Upload {
   fileName: string;
   fileType: string;
   byteSize: number;
-  dataUrl: string;
+  storagePath: string;
+  dataUrl?: string;
   uploadedBy: string;
   createdAt: string;
 }
@@ -188,8 +229,13 @@ export interface AuditEntry {
   organisationId: string;
   actorId: string | null;
   actorName: string;
+  actorRole?: UserRole;
   action: string;
   objectType: string;
   objectLabel: string;
+  taskId?: string | null;
+  previousStatus?: string | null;
+  newStatus?: string | null;
+  reason?: string | null;
   createdAt: string;
 }

@@ -12,7 +12,7 @@ const ACTION_LABEL: Record<string, string> = {
   "upload.create": "uploaded a file",
   "transcription.draft": "ran transcription on",
   "transcription.edit": "edited",
-  "transcription.verify": "verified",
+  "transcription.specialist_verify": "specialist verified",
   "feedback.generate": "generated feedback for",
   "feedback.edit": "edited feedback for",
   "feedback.approve": "approved feedback for",
@@ -25,7 +25,9 @@ const ACTION_LABEL: Record<string, string> = {
   "stem.approve": "approved",
   "task.reject": "rejected",
   "task.archive": "archived",
-  export: "exported",
+  "export.preview": "opened print preview for",
+  "export.completed": "exported",
+  "data.delete": "secure-deleted",
   "user.role_change": "changed the role of",
   "settings.retention": "updated retention",
   "eval.sample": "added an evaluation sample",
@@ -64,7 +66,11 @@ export default function AuditPage() {
                     {ACTION_LABEL[e.action] ?? e.action}{" "}
                     <span className="font-medium text-zinc-900">{e.objectLabel}</span>
                   </p>
-                  <p className="mt-0.5 text-xs text-zinc-400">{e.objectType}</p>
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    {e.objectType}
+                    {e.previousStatus && e.newStatus ? ` - ${e.previousStatus} to ${e.newStatus}` : ""}
+                    {e.reason ? ` - ${e.reason}` : ""}
+                  </p>
                 </div>
                 <span className="shrink-0 text-xs text-zinc-400">{formatRelative(e.createdAt)}</span>
               </li>

@@ -2,10 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
-import { getBrailleTask, getTaskUpload } from "@/lib/data";
-import { pupilLabel, userName } from "@/lib/store";
+import { getBrailleTask, getTaskAudit, getTaskUpload } from "@/lib/data";
+import { pupilLabel, uploadDataUrl, userName } from "@/lib/store";
 import { can } from "@/lib/rbac";
 import { TaskBadge } from "@/components/ui/badge";
+import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
 import { ReviewWorkflow } from "./review-workflow";
 
@@ -15,8 +16,9 @@ export default function BrailleDetailPage({ params }: { params: { id: string } }
   if (!task) notFound();
 
   const up = getTaskUpload(task.id);
+  const timeline = getTaskAudit(task.id);
   const upload = up
-    ? { dataUrl: up.dataUrl, fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
+    ? { dataUrl: uploadDataUrl(up), fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
     : null;
 
   return (
@@ -41,7 +43,7 @@ export default function BrailleDetailPage({ params }: { params: { id: string } }
         upload={upload}
         permissions={{
           canEdit: can(user.role, "transcription.edit"),
-          canVerify: can(user.role, "transcription.verify"),
+          canVerify: can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate }),
           canFeedback: can(user.role, "feedback.generate"),
           canApproveFeedback: can(user.role, "feedback.approve"),
           canReject: can(user.role, "task.reject"),
@@ -49,6 +51,9 @@ export default function BrailleDetailPage({ params }: { params: { id: string } }
           canExport: can(user.role, "export"),
         }}
       />
+      <div className="mt-5">
+        <TaskTimeline entries={timeline} />
+      </div>
     </div>
   );
 }

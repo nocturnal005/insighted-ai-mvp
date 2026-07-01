@@ -20,6 +20,7 @@ export interface FeedbackDraft {
   findings: FeedbackFindings;
   teacherComments: string;
   learnerSummary: string;
+  reviewWarnings: string[];
 }
 
 export function generateFeedback(text: string): FeedbackDraft {
@@ -59,11 +60,16 @@ export function generateFeedback(text: string): FeedbackDraft {
   const teacherComments =
     spelling.length || contractions.length
       ? "Good effort overall. Review the flagged spelling/contraction points together and re-attempt those words."
-      : "Clear, well-structured work. Confirm the transcription against the original before marking.";
+      : "Clear, well-structured work. Mark the subject content using the specialist-verified English transcription.";
 
   const learnerSummary =
     "Well done on completing this. There are a couple of small things to check together — " +
     "we'll go through them in our next session.";
 
-  return { summary, findings: { spelling, contractions, formatting, unclear }, teacherComments, learnerSummary };
+  const reviewWarnings = [
+    "Subject feedback does not verify Braille accuracy.",
+    "Braille contractions, formatting, or unclear source marks must remain specialist review items.",
+  ];
+
+  return { summary, findings: { spelling, contractions, formatting, unclear }, teacherComments, learnerSummary, reviewWarnings };
 }

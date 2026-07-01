@@ -7,6 +7,7 @@ import { VISUAL_TYPE_LABELS } from "@/lib/braille-engine";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskBadge } from "@/components/ui/badge";
 import { formatRelative } from "@/lib/utils";
+import type { TaskStatus } from "@/lib/types";
 
 export default function PupilDetailPage({ params }: { params: { id: string } }) {
   requireUser();
@@ -49,7 +50,7 @@ export default function PupilDetailPage({ params }: { params: { id: string } }) 
 }
 
 function Row({ href, icon: Icon, title, sub, status, when }: {
-  href: string; icon: React.ComponentType<{ className?: string }>; title: string; sub: string; status: "draft" | "needs_review" | "approved" | "rejected" | "archived"; when: string;
+  href: string; icon: React.ComponentType<{ className?: string }>; title: string; sub: string; status: TaskStatus; when: string;
 }) {
   return (
     <li>

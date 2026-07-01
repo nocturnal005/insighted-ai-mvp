@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import {
   Sparkles, Loader2, CheckCircle2, AlertTriangle, FileText, Lock,
-  XCircle, Archive, Ban,
+  XCircle, Archive, Ban, UploadCloud, ScanText, ShieldCheck, FileCheck2,
 } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { TranscriptionBadge } from "@/components/ui/badge";
@@ -22,12 +22,13 @@ interface Perms {
 
 export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTask; upload: SourceUpload | null; permissions: Perms }) {
   const t = task.transcription;
-  const verified = t?.status === "verified";
+  const verified = t?.status === "specialist_verified";
   const fb = task.feedback;
   const fbApproved = fb?.status === "approved";
   const ended = task.status === "rejected" || task.status === "archived";
 
   const [text, setText] = useState(t?.editedText ?? "");
+  const [specialistNotes, setSpecialistNotes] = useState(t?.specialistNotes ?? "");
   const [comments, setComments] = useState(fb?.teacherComments ?? "");
   const [learner, setLearner] = useState(fb?.learnerSummary ?? "");
   const [rejecting, setRejecting] = useState(false);
@@ -42,6 +43,8 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
 
   return (
     <div className="space-y-5">
+      <WorkflowStages task={task} hasUpload={Boolean(upload)} />
+
       {task.status === "rejected" && (
         <div className="flex items-start gap-2.5 rounded-xl bg-critical-50 px-4 py-3 text-sm text-critical-700">
           <Ban className="mt-0.5 h-4 w-4 shrink-0" />
@@ -119,6 +122,12 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
               <label htmlFor="transcript" className="mb-1.5 block text-sm font-medium text-zinc-700">English transcription</label>
               <textarea id="transcript" value={text} onChange={(e) => setText(e.target.value)} readOnly={verified || !permissions.canEdit} rows={7} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
             </div>
+            {!verified && (
+              <div>
+                <label htmlFor="specialistNotes" className="mb-1.5 block text-sm font-medium text-zinc-700">Specialist transcription notes</label>
+                <textarea id="specialistNotes" value={specialistNotes} onChange={(e) => setSpecialistNotes(e.target.value)} rows={3} className="w-full rounded-lg border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 focus:border-accent-500" placeholder="Record unclear Braille, contractions, formatting, or source-quality issues for the teacher." />
+              </div>
+            )}
             {verified ? (
               <>
                 <div className="flex items-center gap-2 rounded-xl bg-positive-50 px-3.5 py-3 text-sm text-positive-700"><Lock className="h-4 w-4" /> Verified and locked — staff-approved final transcription.</div>
@@ -130,8 +139,8 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
                   <button onClick={() => run("save", () => saveTranscription(task.id, text))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save edits</button>
                 )}
                 {permissions.canVerify ? (
-                  <button onClick={() => run("verify", () => verifyTranscription(task.id, text))} disabled={pending || text.trim().length === 0} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Mark as verified</button>
-                ) : (<span className="text-xs text-zinc-400">A teacher or QTVI must verify this.</span>)}
+                  <button onClick={() => run("verify", () => verifyTranscription(task.id, text, specialistNotes))} disabled={pending || text.trim().length === 0} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
+                ) : (<span className="text-xs text-zinc-400">A QTVI, admin, or Braille-literate staff member must verify this.</span>)}
               </div>
             )}
           </CardBody>
@@ -149,7 +158,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
             {!fb ? (
               <div className="flex flex-col items-center gap-3 py-8 text-center">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-50 text-accent-600"><FileText className="h-5 w-5" /></span>
-                <p className="text-sm text-zinc-500">Generate a draft feedback report from the verified transcription.</p>
+                <p className="text-sm text-zinc-500">Generate subject feedback from the specialist-verified English transcription.</p>
                 {permissions.canFeedback ? (
                   <button onClick={() => run("feedback", () => createFeedback(task.id))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "feedback" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Generate feedback</button>
                 ) : (<span className="text-xs text-zinc-400">A teacher or QTVI can generate the report.</span>)}
@@ -157,13 +166,12 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
             ) : (
               <div className="space-y-4">
                 <p className="text-sm text-zinc-700">{fb.summary}</p>
-                <Findings title="Spelling (AI-suggested)" items={fb.findings.spelling} />
-                <Findings title="Contractions (AI-suggested)" items={fb.findings.contractions} />
-                <Findings title="Formatting (AI-suggested)" items={fb.findings.formatting} />
-                <Findings title="Needs review" items={fb.findings.unclear} />
+                <Findings title="Specialist transcription notes" items={[fb.specialistNotes].filter(Boolean)} />
+                <Findings title="Specialist review items" items={[...fb.findings.contractions, ...fb.findings.formatting, ...fb.findings.unclear]} />
+                <Findings title="Subject teacher feedback prompts" items={fb.findings.spelling} />
 
                 <div>
-                  <label htmlFor="comments" className="mb-1.5 block text-sm font-medium text-zinc-700">Teacher comments {!fbApproved && <span className="text-xs font-normal text-zinc-400">(edit before approving)</span>}</label>
+                  <label htmlFor="comments" className="mb-1.5 block text-sm font-medium text-zinc-700">Subject teacher feedback {!fbApproved && <span className="text-xs font-normal text-zinc-400">(edit before approving)</span>}</label>
                   <textarea id="comments" value={comments} onChange={(e) => setComments(e.target.value)} readOnly={fbApproved} rows={3} className="w-full rounded-lg border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
                 </div>
                 <div>
@@ -189,6 +197,52 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
           </CardBody>
         </Card>
       )}
+    </div>
+  );
+}
+
+function WorkflowStages({ task, hasUpload }: { task: BrailleTask; hasUpload: boolean }) {
+  const hasDraft = Boolean(task.transcription);
+  const specialistVerified = task.transcription?.status === "specialist_verified";
+  const teacherFeedbackStarted = Boolean(task.feedback);
+  const teacherApproved = task.feedback?.status === "approved";
+  const exported = Boolean(task.exportedAt);
+
+  const stages = [
+    { label: "Upload", icon: UploadCloud, done: hasUpload || hasDraft || task.status !== "draft" },
+    { label: "AI draft", icon: ScanText, done: hasDraft },
+    { label: "Specialist verify", icon: ShieldCheck, done: specialistVerified },
+    { label: "Teacher feedback", icon: FileText, done: teacherFeedbackStarted || teacherApproved },
+    { label: "Export", icon: FileCheck2, done: exported },
+  ];
+
+  const currentIndex = stages.findIndex((stage) => !stage.done);
+
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-3 shadow-subtle">
+      <ol className="grid grid-cols-1 gap-2 sm:grid-cols-5">
+        {stages.map((stage, index) => {
+          const Icon = stage.icon;
+          const current = index === currentIndex;
+          return (
+            <li
+              key={stage.label}
+              className={`flex min-h-14 items-center gap-2 rounded-lg px-2.5 py-2 ${
+                stage.done
+                  ? "bg-positive-50 text-positive-700"
+                  : current
+                    ? "bg-caution-50 text-caution-700"
+                    : "bg-zinc-50 text-zinc-400"
+              }`}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/80">
+                {stage.done ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+              </span>
+              <span className="min-w-0 text-xs font-semibold">{stage.label}</span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

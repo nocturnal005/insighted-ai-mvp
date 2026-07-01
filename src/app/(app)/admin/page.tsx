@@ -7,7 +7,7 @@ import { getUsers, getSettings } from "@/lib/data";
 import { initials } from "@/lib/utils";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
-import { setUserRole, setRetention } from "./actions";
+import { secureDeleteExpiredMaterial, setUserRole, setRetention } from "./actions";
 
 export default function AdminPage() {
   const user = requireUser();
@@ -64,10 +64,12 @@ export default function AdminPage() {
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-positive-600" />
               <span>Pupil uploads are <span className="font-medium">never used to train AI</span> by default.</span>
             </div>
-            <button className="inline-flex items-center gap-2 rounded-lg border border-critical-200 px-3.5 py-2 text-[13px] font-medium text-critical-600 hover:bg-critical-50">
-              <Trash2 className="h-4 w-4" /> Secure-delete pupil material
-            </button>
-            <p className="text-xs text-zinc-400">Secure deletion is stubbed in this demo. In production it removes files and writes a deletion audit record.</p>
+            <form action={secureDeleteExpiredMaterial}>
+              <button className="inline-flex items-center gap-2 rounded-lg border border-critical-200 px-3.5 py-2 text-[13px] font-medium text-critical-600 hover:bg-critical-50">
+                <Trash2 className="h-4 w-4" /> Secure-delete expired uploads
+              </button>
+            </form>
+            <p className="text-xs text-zinc-400">Deletes locally stored upload files older than the retention period and writes a deletion audit record.</p>
           </CardBody>
         </Card>
 

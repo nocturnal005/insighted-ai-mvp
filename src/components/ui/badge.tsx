@@ -17,8 +17,13 @@ function Pill({ className, children }: { className: string; children: React.Reac
 
 const TASK: Record<TaskStatus, { c: string; label: string }> = {
   draft: { c: "bg-zinc-100 text-zinc-600", label: "Draft" },
+  ready_for_transcription: { c: "bg-accent-50 text-accent-700", label: "Ready to transcribe" },
   needs_review: { c: "bg-caution-50 text-caution-700", label: "Needs review" },
+  needs_specialist_review: { c: "bg-caution-50 text-caution-700", label: "Needs specialist review" },
+  specialist_verified: { c: "bg-positive-50 text-positive-700", label: "Specialist verified" },
+  teacher_review: { c: "bg-accent-50 text-accent-700", label: "Teacher review" },
   approved: { c: "bg-positive-50 text-positive-700", label: "Approved" },
+  returned_for_correction: { c: "bg-critical-50 text-critical-700", label: "Returned for correction" },
   rejected: { c: "bg-critical-50 text-critical-700", label: "Rejected" },
   archived: { c: "bg-zinc-100 text-zinc-500", label: "Archived" },
 };
@@ -30,7 +35,9 @@ export function TaskBadge({ status }: { status: TaskStatus }) {
 
 const TRANSCRIPTION: Record<TranscriptionStatus, { c: string; label: string }> = {
   draft: { c: "bg-caution-50 text-caution-700", label: "AI draft" },
-  verified: { c: "bg-positive-50 text-positive-700", label: "Verified" },
+  needs_specialist_review: { c: "bg-caution-50 text-caution-700", label: "Needs specialist review" },
+  specialist_verified: { c: "bg-positive-50 text-positive-700", label: "Specialist verified" },
+  returned_for_correction: { c: "bg-critical-50 text-critical-700", label: "Returned for correction" },
 };
 
 export function TranscriptionBadge({ status }: { status: TranscriptionStatus }) {
@@ -40,6 +47,7 @@ export function TranscriptionBadge({ status }: { status: TranscriptionStatus }) 
 
 const APPROVAL: Record<ApprovalStatus, { c: string; label: string }> = {
   draft: { c: "bg-caution-50 text-caution-700", label: "Draft" },
+  teacher_review: { c: "bg-accent-50 text-accent-700", label: "Teacher review" },
   approved: { c: "bg-positive-50 text-positive-700", label: "Approved" },
 };
 
