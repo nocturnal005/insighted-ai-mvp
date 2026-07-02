@@ -19,6 +19,8 @@ A 10–15 minute walkthrough for presenting InsightEd AI to school leaders, SENC
 
 Timings below are a guide (≈13 minutes of content).
 
+> **Validated against the working app on 2026-07-02.** Every step below was walked through end-to-end in demo mode (see [demo-test-matrix.md](./demo-test-matrix.md) and [demo-bug-report.md](./demo-bug-report.md)). Known limitations to mention are in [demo-known-limitations.md](./demo-known-limitations.md).
+
 ---
 
 ### 1. Opening message (1 min)
@@ -86,7 +88,7 @@ Timings below are a guide (≈13 minutes of content).
 
 - Sign in as **Priya (QTVI)** or **Marcus (Admin)**; open Quality; add a sample with an image and ground-truth text; **Run evaluation**.
 
-> "This is how we prove and track accuracy. We hold out samples where we already know the correct transcription, run the engine, and measure the error rate — character error rate and word error rate — alongside provider, model, confidence, and any flags. This gives the school an evidence base, and it's how a real specialist OCR engine would be validated before wider rollout."
+> "This is how we prove and track accuracy. We hold out samples where we already know the correct transcription, run the engine, and measure the error rate — character error rate and word error rate — alongside provider, model, confidence, and any flags. Each sample shows the **ground truth next to the AI/OCR prediction**, so you can see exactly what staff would need to correct. This gives the school an evidence base, and it's how a real specialist OCR engine would be validated before wider rollout."
 
 ### 9. Audit and admin demo (1.5 min)
 

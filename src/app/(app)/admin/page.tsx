@@ -29,7 +29,17 @@ export default function AdminPage() {
               <li key={u.id} className="flex items-center gap-3.5 px-5 py-3.5">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-100 text-[11px] font-semibold text-accent-700">{initials(u.fullName)}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-zinc-900">{u.fullName}</p>
+                  <p className="flex items-center gap-2 text-sm font-medium text-zinc-900">
+                    {u.fullName}
+                    {u.brailleLiterate && (
+                      <span
+                        title="Explicitly Braille-literate — may specialist-verify Braille accuracy even as a Teaching Assistant"
+                        className="inline-flex items-center rounded-md bg-accent-50 px-1.5 py-0.5 text-[10px] font-semibold text-accent-700"
+                      >
+                        Braille-literate
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-zinc-400">{u.email}</p>
                 </div>
                 <form action={setUserRole} className="flex items-center gap-2">

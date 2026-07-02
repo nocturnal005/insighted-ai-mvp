@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
 /**
- * Stage 3A demo-readiness validation.
+ * Demo-readiness validation (Stage 3A structure + Stage 3B testing artefacts).
  *
  * Confirms the demo can be walked through confidently: the demo docs and resource
  * structure exist, the README documents the walkthrough, demo mode is still available,
@@ -19,6 +19,8 @@ const mustExist = [
   "docs/demo-test-matrix.md",
   "docs/client-demo-script.md",
   "docs/demo-readiness-checklist.md",
+  "docs/demo-known-limitations.md",
+  "docs/demo-bug-report.md",
   "demo-resources/README.md",
   "demo-resources/braille/.gitkeep",
   "demo-resources/visuals/.gitkeep",
@@ -31,7 +33,7 @@ const mustExist = [
 const checks = [
   {
     file: "README.md",
-    mustContain: ["Demo Validation & Client Walkthrough", DATA_SAFETY],
+    mustContain: ["Demo Validation & Client", DATA_SAFETY],
   },
   {
     file: "demo-resources/README.md",
@@ -51,6 +53,14 @@ const checks = [
   {
     file: "docs/demo-readiness-checklist.md",
     mustContain: [DATA_SAFETY, "validate:demo", "No identifiable pupil data"],
+  },
+  {
+    file: "docs/demo-known-limitations.md",
+    mustContain: [DATA_SAFETY, "specialist verification", "draft"],
+  },
+  {
+    file: "docs/demo-bug-report.md",
+    mustContain: ["Bug ID", "Severity", "Fix applied"],
   },
   {
     file: "package.json",

@@ -199,11 +199,13 @@ Core product rule: Braille accuracy verification is separate from subject teache
 | Helen Wright | SENCO | Oversight, audit, export, archive |
 | Marcus Bell | Admin | Users, settings, audit, retention/deletion |
 
-## Demo Validation & Client Walkthrough
+## Demo Validation & Client Showcase
 
 A structured process for confirming every core feature works end-to-end and for presenting the app to a school/client audience — all in safe demo mode.
 
 > **Demo resources must be synthetic, anonymised, or permission-cleared. Do not use identifiable pupil data or live assessment materials without school approval.**
+
+> **Validation status (2026-07-02):** the full [demo test matrix](docs/demo-test-matrix.md) was executed end-to-end in demo mode — **49/49 pass**. Three issues were found and fixed (see [docs/demo-bug-report.md](docs/demo-bug-report.md)); no Priority-0 blockers remained. All safety gates (specialist Braille verification, export approval, role permissions, audit) held.
 
 ### Run demo mode
 
@@ -245,7 +247,21 @@ Follow [`docs/client-demo-script.md`](docs/client-demo-script.md) — a 10–15 
 
 Positioning to hold throughout: **InsightEd AI does not replace QTVIs, Braille-literate staff, or teachers. It creates AI/OCR drafts that are reviewed, corrected, approved, and audited by the right staff roles.**
 
+### Validation commands
+
+Before any demo, run and confirm all pass:
+
+```bash
+npm run typecheck
+npm run build
+npm run validate:mvp    # workflow/RBAC + AI/OCR presence, no old mock calls
+npm run validate:ai     # AI/OCR behavioural guarantees
+npm run validate:demo   # demo docs + resource structure, gates and wording intact
+```
+
 ### Known demo limitations
+
+Full detail in [`docs/demo-known-limitations.md`](docs/demo-known-limitations.md). In brief:
 
 - AI/OCR output is always a **draft**; mock mode is offline/deterministic and is not a substitute for specialist verification.
 - OpenAI vision is **not** a definitive Braille OCR engine — its Braille output is a non-specialist draft requiring QTVI/Braille-literate verification.

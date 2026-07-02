@@ -38,6 +38,13 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
   const [pending, start] = useTransition();
   const [action, setAction] = useState<string | null>(null);
 
+  // Editable fields fall back to the latest server value so a freshly generated draft
+  // (produced by a server action + revalidate, without a remount) is shown immediately —
+  // otherwise the textarea would stay empty until a manual page reload.
+  const transcriptValue = text || t?.editedText || "";
+  const commentsValue = comments || fb?.teacherComments || "";
+  const learnerValue = learner || fb?.learnerSummary || "";
+
   function run(name: string, fn: () => Promise<void>) {
     setAction(name);
     start(async () => { await fn(); setAction(null); });
@@ -99,7 +106,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
           <CardBody className="flex flex-col items-center gap-3 py-12 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-50 text-accent-600"><Sparkles className="h-6 w-6" /></span>
             <div><p className="font-medium text-zinc-900">Ready to transcribe</p><p className="mt-0.5 text-sm text-zinc-500">Run the engine to produce a draft English transcription for review.</p></div>
-            <button onClick={() => run("transcribe", () => runTranscription(task.id))} disabled={pending} className="mt-1 inline-flex h-10 items-center gap-2 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50">
+            <button onClick={() => run("transcribe", async () => { await runTranscription(task.id); setText(""); })} disabled={pending} className="mt-1 inline-flex h-10 items-center gap-2 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50">
               {action === "transcribe" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {action === "transcribe" ? "Transcribing…" : "Run transcription"}
             </button>
           </CardBody>
@@ -127,7 +134,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
               />
               {!verified && permissions.canEdit && Boolean(upload) && (
                 <button
-                  onClick={() => run("rerun", () => rerunBrailleTranscription(task.id))}
+                  onClick={() => run("rerun", async () => { await rerunBrailleTranscription(task.id); setText(""); })}
                   disabled={pending}
                   title="Re-run OCR on the uploaded image"
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
@@ -144,7 +151,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
             )}
             <div>
               <label htmlFor="transcript" className="mb-1.5 block text-sm font-medium text-zinc-700">English transcription</label>
-              <textarea id="transcript" value={text} onChange={(e) => setText(e.target.value)} readOnly={verified || !permissions.canEdit} rows={7} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
+              <textarea id="transcript" value={transcriptValue} onChange={(e) => setText(e.target.value)} readOnly={verified || !permissions.canEdit} rows={7} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
             </div>
             {!verified && (
               <div>
@@ -161,10 +168,10 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
               <div className="flex flex-wrap items-center justify-end gap-2.5">
                 <ExportGateHint className="mr-auto" message="Teacher feedback & export unlock after specialist verification" />
                 {permissions.canEdit && (
-                  <button onClick={() => run("save", () => saveTranscription(task.id, text))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save edits</button>
+                  <button onClick={() => run("save", () => saveTranscription(task.id, transcriptValue))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save edits</button>
                 )}
                 {permissions.canVerify ? (
-                  <button onClick={() => run("verify", () => verifyTranscription(task.id, text, specialistNotes))} disabled={pending || text.trim().length === 0} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
+                  <button onClick={() => run("verify", () => verifyTranscription(task.id, transcriptValue, specialistNotes))} disabled={pending || transcriptValue.trim().length === 0} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
                 ) : (<span className="text-xs text-zinc-400">A QTVI, admin, or Braille-literate staff member must verify this.</span>)}
               </div>
             )}
@@ -185,7 +192,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-50 text-accent-600"><FileText className="h-5 w-5" /></span>
                 <p className="text-sm text-zinc-500">Generate subject feedback from the specialist-verified English transcription.</p>
                 {permissions.canFeedback ? (
-                  <button onClick={() => run("feedback", () => createFeedback(task.id))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "feedback" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Generate feedback</button>
+                  <button onClick={() => run("feedback", async () => { await createFeedback(task.id); setComments(""); setLearner(""); })} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "feedback" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Generate feedback</button>
                 ) : (<span className="text-xs text-zinc-400">A teacher or QTVI can generate the report.</span>)}
               </div>
             ) : (
@@ -198,11 +205,11 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
 
                 <div>
                   <label htmlFor="comments" className="mb-1.5 block text-sm font-medium text-zinc-700">Subject teacher feedback {!fbApproved && <span className="text-xs font-normal text-zinc-400">(edit before approving)</span>}</label>
-                  <textarea id="comments" value={comments} onChange={(e) => setComments(e.target.value)} readOnly={fbApproved} rows={3} className="w-full rounded-lg border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
+                  <textarea id="comments" value={commentsValue} onChange={(e) => setComments(e.target.value)} readOnly={fbApproved} rows={3} className="w-full rounded-lg border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
                 </div>
                 <div>
                   <label htmlFor="learner" className="mb-1.5 block text-sm font-medium text-zinc-700">Learner-friendly summary</label>
-                  <textarea id="learner" value={learner} onChange={(e) => setLearner(e.target.value)} readOnly={fbApproved} rows={2} className="w-full rounded-lg border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
+                  <textarea id="learner" value={learnerValue} onChange={(e) => setLearner(e.target.value)} readOnly={fbApproved} rows={2} className="w-full rounded-lg border border-zinc-200 px-3.5 py-2.5 text-sm text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
                 </div>
 
                 {fbApproved ? (
@@ -213,7 +220,7 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
                 ) : (
                   <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-zinc-100 pt-4">
                     <ExportGateHint className="mr-auto" message="Export locked until approval" />
-                    <button onClick={() => run("savefb", () => saveFeedback(task.id, comments, learner))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "savefb" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
+                    <button onClick={() => run("savefb", () => saveFeedback(task.id, commentsValue, learnerValue))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "savefb" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
                     {permissions.canApproveFeedback ? (
                       <button onClick={() => run("approvefb", () => approveFeedback(task.id))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approvefb" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve report</button>
                     ) : (<span className="text-xs text-zinc-400">A teacher or QTVI must approve.</span>)}

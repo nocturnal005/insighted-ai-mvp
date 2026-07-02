@@ -115,7 +115,17 @@ export default function QualityPage() {
                   <tr key={s.id} className="align-top">
                     <td className="px-5 py-3.5">
                       <p className="font-medium text-zinc-900">{s.label}</p>
-                      <p className="mt-0.5 line-clamp-1 text-xs text-zinc-400">{s.groundTruthText}</p>
+                      <p className="mt-0.5 line-clamp-1 text-xs text-zinc-400">
+                        <span className="font-medium text-zinc-500">Ground truth:</span> {s.groundTruthText}
+                      </p>
+                      {s.prediction && (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">
+                          <span className="font-medium text-zinc-600">AI/OCR prediction:</span> {s.prediction}
+                        </p>
+                      )}
+                      {s.flagSummary && s.flagSummary.length > 0 && (
+                        <p className="mt-0.5 text-[11px] text-caution-700">Flags: {s.flagSummary.join("; ")}</p>
+                      )}
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {s.brailleType && s.brailleType !== "unknown" && <Tag>{s.brailleType.replace(/_/g, " ")}</Tag>}
                         {s.imageQuality && s.imageQuality !== "unknown" && <Tag>image: {s.imageQuality}</Tag>}
