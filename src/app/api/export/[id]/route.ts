@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
-import { buildExport, docToPlainText, type ExportKind } from "@/lib/export-content";
+import { buildExport, docToPlainText, isExportKind } from "@/lib/export-content";
 import { markExported } from "@/lib/export-record";
+
+// Reads the demo session cookie — never statically cached.
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/export/:id?kind=transcription|feedback|visual|stem
@@ -13,8 +16,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
   if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   if (!can(user.role, "export")) return NextResponse.json({ error: "Not permitted" }, { status: 403 });
 
-  const kind = new URL(request.url).searchParams.get("kind") as ExportKind | null;
-  if (!kind) return NextResponse.json({ error: "Missing kind" }, { status: 400 });
+  const kind = new URL(request.url).searchParams.get("kind");
+  if (!isExportKind(kind)) return NextResponse.json({ error: "Invalid or missing export kind" }, { status: 400 });
 
   const { doc, error } = buildExport(kind, params.id);
   if (error || !doc) return NextResponse.json({ error: error ?? "Not found" }, { status: 409 });

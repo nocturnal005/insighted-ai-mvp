@@ -107,6 +107,31 @@ const behaviours = [
     includes: ["pupilSafetyFlags", "assertRealAiDataAllowed"],
   },
   {
+    name: "real-provider pupil-linked work is BLOCKED pre-flight (no provider call)",
+    file: "src/lib/ai/index.ts",
+    includes: [
+      "realPupilBlockActive",
+      "return blockedBrailleResult()",
+      "return blockedVisualResult()",
+      "return blockedStemResult()",
+    ],
+  },
+  {
+    name: "the blocked result carries a high-severity real_pupil_data_blocked flag",
+    file: "src/lib/ai/uncertainty.ts",
+    includes: ["realPupilDataBlockedFlag", "real_pupil_data_blocked", 'severity: "high"'],
+  },
+  {
+    name: "free-text context is sanitised before reaching a real provider",
+    file: "src/lib/ai/index.ts",
+    includes: ["sanitizeProviderText", "sanitizeVisualInput", "sanitizeBrailleInput"],
+  },
+  {
+    name: "sanitizeProviderText redacts obvious emails / phones / UK postcodes",
+    file: "src/lib/ai/safety.ts",
+    includes: ["export function sanitizeProviderText", "email removed", "phone removed", "postcode removed"],
+  },
+  {
     name: "Liblouis is optional and never mandatory (disabled path returns provider_unavailable)",
     file: "src/lib/ai/providers/braille-translation-provider.ts",
     includes: ["config.enabled", "providerUnavailableFlag", "runLiblouisCli"],

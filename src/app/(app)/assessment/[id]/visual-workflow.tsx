@@ -31,7 +31,8 @@ interface Perms { canApprove: boolean; canEdit: boolean; canReject: boolean; can
 export function VisualWorkflow({ task, upload, permissions }: { task: VisualDescriptionTask; upload: SourceUpload | null; permissions: Perms }) {
   const approved = task.status === "approved";
   const rejected = task.status === "rejected";
-  const [text, setText] = useState(task.editedDescription);
+  // `null` = not locally edited (reflects server value); a non-null value is the user's edit.
+  const [text, setText] = useState<string | null>(null);
   const [tier, setTier] = useState<HintTier>(task.hintTier);
   const [context, setContext] = useState<VisualDescriptionTask["context"]>(task.context);
   const [questionPrompt, setQuestionPrompt] = useState(task.questionPrompt ?? "");
@@ -43,7 +44,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
 
   const contextRisk = ASSESSMENT_LIKE.has(context) && (!questionPrompt.trim() || !assessedSkill.trim());
   const aiFlags = task.aiFlags ?? [];
-  const aiUnavailable = aiFlags.some((f) => f.category === "provider_unavailable" || f.category === "processing_failed");
+  const aiUnavailable = aiFlags.some((f) => f.category === "provider_unavailable" || f.category === "processing_failed" || f.category === "real_pupil_data_blocked");
 
   function run(name: string, fn: () => Promise<void>) {
     setAction(name);
@@ -52,7 +53,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
 
   /** Redact a flagged phrase by replacing it inline (staff control over answer leakage). */
   function redact(phrase: string) {
-    setText((cur) => (cur || task.editedDescription).split(phrase).join("[redacted]"));
+    setText((cur) => (cur ?? task.editedDescription).split(phrase).join("[redacted]"));
   }
 
   return (
@@ -116,7 +117,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
                     fd.set("assessedSkill", assessedSkill);
                     fd.set("hintTier", tier);
                     await updateVisualContext(task.id, fd);
-                    setText("");
+                    setText(null);
                   })}
                   disabled={pending}
                   className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
@@ -182,7 +183,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
             />
             {!approved && permissions.canEdit && Boolean(upload) && (
               <button
-                onClick={() => run("rerun", async () => { await rerunVisualDescription(task.id); setText(""); })}
+                onClick={() => run("rerun", async () => { await rerunVisualDescription(task.id); setText(null); })}
                 disabled={pending}
                 title="Re-run the description on the uploaded image"
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
@@ -194,7 +195,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
           {!approved && (
             <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><span>Check that the description gives access to the visual without revealing what the learner is being assessed on.</span></div>
           )}
-          <textarea value={text || task.editedDescription} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={6} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
+          <textarea value={text ?? task.editedDescription} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={6} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
 
           {approved ? (
             <>
@@ -218,10 +219,10 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
                   <button onClick={() => setRejecting(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3.5 text-[13px] text-critical-600 hover:bg-critical-50"><XCircle className="h-3.5 w-3.5" /> Reject</button>
                 )}
                 {permissions.canEdit && (
-                  <button onClick={() => run("save", () => updateVisual(task.id, text || task.editedDescription, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
+                  <button onClick={() => run("save", () => updateVisual(task.id, text ?? task.editedDescription, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
                 )}
                 {permissions.canApprove ? (
-                  <button onClick={() => run("approve", () => approveVisual(task.id, text || task.editedDescription, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve for use</button>
+                  <button onClick={() => run("approve", () => approveVisual(task.id, text ?? task.editedDescription, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve for use</button>
                 ) : (<span className="text-xs text-zinc-400">A teacher or QTVI must approve this.</span>)}
               </div>
             </>

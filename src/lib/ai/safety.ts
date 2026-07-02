@@ -17,6 +17,31 @@ export function truncateText(value: string, max: number = MAX_FLAG_TEXT): string
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+/** Cap on any single free-text field sent to a real provider. */
+const MAX_PROVIDER_TEXT = 200;
+
+/**
+ * Lightweight safety layer for free-text context bound for a REAL provider. Trims, length-
+ * limits, and redacts obvious emails / UK phone numbers / UK postcodes. It is deliberately
+ * NOT full PII detection — pupil names/identifiers are already never sent (only a boolean
+ * `hasLinkedPupil`); this reduces incidental leakage in titles/prompts/etc.
+ */
+export function sanitizeProviderText(
+  value: string | null | undefined,
+  max: number = MAX_PROVIDER_TEXT,
+): string | null {
+  if (value == null) return null;
+  let s = String(value).trim();
+  if (!s) return null;
+  s = s
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[email removed]")
+    .replace(/(?:\+?44\s?7\d{3}|\(?07\d{3}\)?)\s?\d{3}\s?\d{3}/g, "[phone removed]")
+    .replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, "[postcode removed]");
+  s = s.trim();
+  if (s.length > max) s = `${s.slice(0, max - 1)}…`;
+  return s || null;
+}
+
 /**
  * Real-pupil-data safety guard. When the app is in real mode and a task is linked to a
  * pupil while `ALLOW_REAL_PUPIL_DATA` is false, returns a high-severity warning flag. It

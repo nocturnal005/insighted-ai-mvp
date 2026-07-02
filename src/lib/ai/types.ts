@@ -54,7 +54,8 @@ export type UncertaintyCategory =
   | "requires_specialist_review"
   | "provider_unavailable"
   | "processing_failed"
-  | "pdf_processing_pending";
+  | "pdf_processing_pending"
+  | "real_pupil_data_blocked";
 
 export type UncertaintySeverity = "low" | "medium" | "high";
 

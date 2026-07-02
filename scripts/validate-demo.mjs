@@ -27,6 +27,10 @@ const mustExist = [
   "demo-resources/stem/.gitkeep",
   "demo-resources/quality/.gitkeep",
   "demo-resources/exports/.gitkeep",
+  // Stage 3C additions.
+  ".github/workflows/ci.yml",
+  "src/components/mobile-nav.tsx",
+  "src/components/upload-note.tsx",
 ];
 
 // Positive checks: each file must contain each string.
@@ -61,6 +65,19 @@ const checks = [
   {
     file: "docs/demo-bug-report.md",
     mustContain: ["Bug ID", "Severity", "Fix applied"],
+  },
+  // Stage 3C: PDF messaging + mobile nav + CI.
+  {
+    file: "src/components/upload-note.tsx",
+    mustContain: ["PDF OCR is not yet available"],
+  },
+  {
+    file: "src/components/mobile-nav.tsx",
+    mustContain: ["visibleNavItems", "lg:hidden"],
+  },
+  {
+    file: ".github/workflows/ci.yml",
+    mustContain: ["npm run typecheck", "npm run build", "npm run validate:demo", "node-version: 20"],
   },
   {
     file: "package.json",
@@ -111,6 +128,11 @@ const negativeChecks = [
       "draftStemDescription(visualType, style)",
       "simulateOcr(sample.groundTruthText)",
     ],
+  },
+  // Stage 3C: compliance overclaim must not reappear.
+  {
+    files: ["src/app/login/page.tsx", "README.md"],
+    mustNotContain: ["UK Public Sector Security Compliant", "UK data region"],
   },
 ];
 

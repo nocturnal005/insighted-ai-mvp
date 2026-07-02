@@ -66,6 +66,44 @@ const checks = [
     file: "src/lib/session.ts",
     mustContain: ["DEMO_MODE", "secure: process.env.NODE_ENV === \"production\""],
   },
+  // Stage 3C: build reliability — protected app layout is explicitly dynamic.
+  {
+    file: "src/app/(app)/layout.tsx",
+    mustContain: ['export const dynamic = "force-dynamic"'],
+  },
+  // Stage 3C: Server Actions body limit is aligned above the app upload cap.
+  {
+    file: "next.config.mjs",
+    mustContain: ['bodySizeLimit: "15mb"'],
+  },
+  // Stage 3C: export kind is validated at runtime (no unsafe cast).
+  {
+    file: "src/lib/export-content.ts",
+    mustContain: ["EXPORT_KINDS", "export function isExportKind"],
+  },
+  {
+    file: "src/app/api/export/[id]/route.ts",
+    mustContain: ["isExportKind", 'export const dynamic = "force-dynamic"'],
+  },
+  // Stage 3C: admin role validation + Braille-literate management.
+  {
+    file: "src/app/(app)/admin/actions.ts",
+    mustContain: [
+      "ALL_ROLES.includes",
+      "export async function setBrailleLiterate",
+      "staff.role_update",
+      "staff.braille_literate_update",
+    ],
+  },
+  // Stage 3C: quality uploads use the tracked Upload model (module "quality").
+  {
+    file: "src/lib/types.ts",
+    mustContain: ['"braille" | "visual" | "stem" | "quality"'],
+  },
+  {
+    file: "src/app/(app)/quality/actions.ts",
+    mustContain: ['module: "quality"', "createUpload", "getUploadById"],
+  },
   {
     file: "src/lib/store.ts",
     mustContain: [".insighted-data", "purgeExpiredUploads", "storagePath"],
@@ -91,6 +129,24 @@ const negativeChecks = [
       "draftStemDescription(visualType, style)",
       "simulateOcr(sample.groundTruthText)",
     ],
+  },
+  // Stage 3C: no unsafe export-kind cast; runtime validation is used instead.
+  {
+    files: ["src/app/api/export/[id]/route.ts", "src/app/print/[id]/page.tsx"],
+    mustNotContain: ["as ExportKind"],
+  },
+  // Stage 3C: editable fields use the null-sentinel (?? ), not the empty-string || fallback
+  // that prevented a field from being intentionally cleared.
+  {
+    files: ["src/app/(app)/braille/[id]/review-workflow.tsx"],
+    mustNotContain: ["text || t?.editedText", "comments || fb?.teacherComments"],
+  },
+  {
+    files: [
+      "src/app/(app)/assessment/[id]/visual-workflow.tsx",
+      "src/app/(app)/stem/[id]/stem-workflow.tsx",
+    ],
+    mustNotContain: ["text || task.editedDescription"],
   },
 ];
 

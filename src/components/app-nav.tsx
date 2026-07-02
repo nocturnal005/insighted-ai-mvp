@@ -7,14 +7,15 @@ import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
 import { can } from "@/lib/rbac";
 
-interface Item {
+export interface NavItem {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   show?: (r: UserRole) => boolean;
 }
 
-const ITEMS: Item[] = [
+/** Single source of truth for primary navigation, shared by the desktop sidebar and mobile drawer. */
+export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/braille", label: "Braille Work Review", icon: ScanText },
   { href: "/assessment", label: "Assessment-Safe", icon: ImageIcon },
@@ -26,12 +27,17 @@ const ITEMS: Item[] = [
   { href: "/admin", label: "Admin & Security", icon: ShieldCheck, show: (r) => can(r, "org.manage") },
 ];
 
+/** Nav items a given role is permitted to see (admin/audit links never leak to other roles). */
+export function visibleNavItems(role: UserRole): NavItem[] {
+  return NAV_ITEMS.filter((i) => !i.show || i.show(role));
+}
+
 export function AppNav({ role }: { role: UserRole }) {
   const pathname = usePathname();
 
   return (
     <nav aria-label="Primary" className="flex flex-col gap-0.5 px-3 py-2">
-      {ITEMS.filter((i) => !i.show || i.show(role)).map((item) => {
+      {visibleNavItems(role).map((item) => {
         const active = pathname === item.href || pathname.startsWith(item.href + "/");
         const Icon = item.icon;
         return (
