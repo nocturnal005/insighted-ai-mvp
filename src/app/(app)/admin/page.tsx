@@ -7,7 +7,7 @@ import { getUsers, getSettings } from "@/lib/data";
 import { initials } from "@/lib/utils";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
-import { secureDeleteExpiredMaterial, setUserRole, setRetention } from "./actions";
+import { secureDeleteExpiredMaterial, setUserRole, setRetention, setBrailleLiterate } from "./actions";
 
 export default function AdminPage() {
   const user = requireUser();
@@ -42,16 +42,36 @@ export default function AdminPage() {
                   </p>
                   <p className="text-xs text-zinc-400">{u.email}</p>
                 </div>
-                <form action={setUserRole} className="flex items-center gap-2">
-                  <input type="hidden" name="userId" value={u.id} />
-                  <select name="role" defaultValue={u.role} className="h-9 rounded-lg border border-zinc-200 px-2 text-[13px]">
-                    {ALL_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                  </select>
-                  <button className="h-9 rounded-lg border border-zinc-200 px-3 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50">Save</button>
-                </form>
+                <div className="flex items-center gap-2">
+                  <form action={setBrailleLiterate}>
+                    <input type="hidden" name="userId" value={u.id} />
+                    <input type="hidden" name="brailleLiterate" value={u.brailleLiterate ? "false" : "true"} />
+                    <button
+                      title="Braille-literate status allows a staff member, including a Teaching Assistant, to specialist-verify Braille accuracy."
+                      className={`h-9 rounded-lg border px-3 text-[13px] font-medium ${
+                        u.brailleLiterate
+                          ? "border-accent-200 bg-accent-50 text-accent-700 hover:bg-accent-100"
+                          : "border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                      }`}
+                    >
+                      {u.brailleLiterate ? "Braille-literate ✓" : "Mark Braille-literate"}
+                    </button>
+                  </form>
+                  <form action={setUserRole} className="flex items-center gap-2">
+                    <input type="hidden" name="userId" value={u.id} />
+                    <select name="role" defaultValue={u.role} className="h-9 rounded-lg border border-zinc-200 px-2 text-[13px]">
+                      {ALL_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                    </select>
+                    <button className="h-9 rounded-lg border border-zinc-200 px-3 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50">Save</button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>
+          <p className="border-t border-zinc-100 px-5 py-3 text-xs text-zinc-500">
+            Braille-literate status allows a staff member, including a Teaching Assistant, to specialist-verify Braille
+            accuracy. Ordinary teachers cannot verify Braille by default; QTVIs and Admins always can.
+          </p>
         </CardBody>
       </Card>
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Upload, Loader2, Check } from "lucide-react";
 import { Card, CardBody } from "@/components/ui/card";
+import { UploadPdfNote } from "@/components/upload-note";
 import { addEvalSample } from "../actions";
 
 function SubmitButton() {
@@ -91,6 +92,7 @@ export function NewSampleForm() {
               <span className="mt-0.5 text-xs text-zinc-400">A real engine will OCR this; the mock scores against the text only</span>
               <input id="image" name="image" type="file" accept="image/png,image/jpeg,image/jpg,application/pdf" className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
             </label>
+            <UploadPdfNote />
           </div>
 
           <p className="rounded-lg border border-caution-200/60 bg-caution-50 px-3 py-2 text-xs text-caution-700">

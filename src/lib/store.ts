@@ -348,6 +348,24 @@ export function createUpload(params: {
   return upload.id;
 }
 
+/** Look up a tracked Upload by its own id (used by eval samples that reference an upload). */
+export function getUploadById(uploadId: string): Upload | undefined {
+  return db.uploads.find((u) => u.id === uploadId);
+}
+
+/** Remove a single tracked upload (file + metadata). Used when deleting an eval sample. */
+export function deleteUploadById(uploadId: string): void {
+  const upload = db.uploads.find((u) => u.id === uploadId);
+  if (!upload) return;
+  try {
+    if (upload.storagePath && existsSync(upload.storagePath)) unlinkSync(upload.storagePath);
+  } catch {
+    // Continue removing metadata even if the file is already gone.
+  }
+  db.uploads = db.uploads.filter((u) => u.id !== uploadId);
+  saveDb();
+}
+
 export function uploadDataUrl(upload: Upload): string {
   if (upload.dataUrl) return upload.dataUrl;
   try {

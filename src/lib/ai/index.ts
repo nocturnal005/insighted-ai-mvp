@@ -7,6 +7,7 @@
  * formed, provenance-stamped result and never touch a provider directly.
  */
 import type {
+  AiProcessingMeta,
   BrailleOcrInput,
   BrailleOcrResult,
   StemDescriptionInput,
@@ -17,6 +18,8 @@ import type {
 } from "./types";
 import { getAiConfig } from "./config";
 import { preprocessImage } from "./preprocessing";
+import { finishMeta, startRun } from "./meta";
+import { realPupilDataBlockedFlag, requiresSpecialistReviewFlag } from "./uncertainty";
 import { describeStemMock, describeVisualMock, transcribeBrailleMock } from "./providers/mock-provider";
 import {
   describeStemWithOpenAI,
@@ -25,7 +28,7 @@ import {
 } from "./providers/openai-vision-provider";
 import { transcribeBrailleExternal } from "./providers/external-braille-provider";
 
-import { assertRealAiDataAllowed } from "./safety";
+import { assertRealAiDataAllowed, sanitizeProviderText } from "./safety";
 
 export * from "./types";
 export { getAiConfig, isRealAiEnabled, getUploadLimits, validateUpload } from "./config";
@@ -46,6 +49,86 @@ function pupilSafetyFlags(hasLinkedPupil: boolean | undefined, objectLabel: stri
     hasLinkedPupil,
     objectLabel,
   });
+}
+
+/**
+ * Preflight guard: true when a real-provider call must be BLOCKED because the task is
+ * pupil-linked, AI_MODE is real, and ALLOW_REAL_PUPIL_DATA is false. In this state no
+ * file or context is sent to any provider. Mock mode is never affected.
+ */
+function realPupilBlockActive(hasLinkedPupil?: boolean): boolean {
+  const c = getAiConfig();
+  return c.mode === "real" && Boolean(hasLinkedPupil) && !c.allowRealPupilData;
+}
+
+/** Provenance stamp for a blocked run — records that no real provider was called. */
+function blockedMeta(): AiProcessingMeta {
+  return finishMeta(startRun(), {
+    provider: "blocked",
+    model: "none",
+    engineVersion: "n/a",
+    promptVersion: "real-pupil-block-v1",
+    mode: "real",
+  });
+}
+
+function blockedBrailleResult(): BrailleOcrResult {
+  return {
+    draftText: "",
+    confidence: 0,
+    flags: [realPupilDataBlockedFlag(), requiresSpecialistReviewFlag()],
+    rawBraille: null,
+    rawCells: null,
+    meta: blockedMeta(),
+    requiresSpecialistReview: true,
+  };
+}
+
+function blockedVisualResult(): VisualDescriptionResult {
+  return {
+    visualType: "other",
+    neutralDescription: "",
+    visibleElements: [],
+    labelsDetected: [],
+    spatialLayout: "",
+    answerSensitiveFlags: [realPupilDataBlockedFlag()],
+    confidence: 0,
+    meta: blockedMeta(),
+    requiresHumanApproval: true,
+  };
+}
+
+function blockedStemResult(): StemDescriptionResult {
+  return {
+    structuredDescription: "",
+    sections: [],
+    answerSensitiveFlags: [realPupilDataBlockedFlag()],
+    confidence: 0,
+    meta: blockedMeta(),
+    requiresHumanApproval: true,
+  };
+}
+
+/** Sanitise free-text fields before they reach a REAL provider. Mock input is untouched. */
+function sanitizeVisualInput<T extends VisualDescriptionInput>(input: T): T {
+  return {
+    ...input,
+    title: sanitizeProviderText(input.title) ?? "",
+    subject: sanitizeProviderText(input.subject),
+    yearGroup: sanitizeProviderText(input.yearGroup),
+    questionPrompt: sanitizeProviderText(input.questionPrompt),
+    assessedSkill: sanitizeProviderText(input.assessedSkill),
+  };
+}
+
+function sanitizeBrailleInput(input: BrailleOcrInput): BrailleOcrInput {
+  return {
+    ...input,
+    title: sanitizeProviderText(input.title) ?? "",
+    subject: sanitizeProviderText(input.subject),
+    yearGroup: sanitizeProviderText(input.yearGroup),
+    fileName: input.fileName ? sanitizeProviderText(input.fileName) ?? undefined : undefined,
+  };
 }
 
 /** Preprocess an uploaded image when present; returns the (possibly) normalised data URL. */
@@ -70,6 +153,10 @@ async function prepare(input: { dataUrl?: string; imageUrl?: string; mimeType?: 
  */
 export async function transcribeBraille(input: BrailleOcrInput): Promise<BrailleOcrResult> {
   const config = getAiConfig();
+
+  // Preflight block: pupil-linked + real mode + not approved → never reach a real provider.
+  if (realPupilBlockActive(input.hasLinkedPupil)) return blockedBrailleResult();
+
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
 
@@ -77,9 +164,9 @@ export async function transcribeBraille(input: BrailleOcrInput): Promise<Braille
   if (config.mode === "mock") {
     result = await transcribeBrailleMock(routed);
   } else if (config.brailleOcrProvider === "openai_vision_draft") {
-    result = await transcribeBrailleWithOpenAIDraft(routed);
+    result = await transcribeBrailleWithOpenAIDraft(sanitizeBrailleInput(routed));
   } else if (config.brailleOcrProvider === "external_braille_ocr") {
-    result = await transcribeBrailleExternal(routed);
+    result = await transcribeBrailleExternal(sanitizeBrailleInput(routed));
   } else {
     // Real mode but Braille provider left as mock — safe default.
     result = await transcribeBrailleMock(routed);
@@ -105,9 +192,13 @@ function shouldUseRealOpenAi(): boolean {
  * never a silent downgrade to mock). Mock mode stays fully offline.
  */
 export async function describeVisual(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
+  if (realPupilBlockActive(input.hasLinkedPupil)) return blockedVisualResult();
+
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
-  const result = shouldUseRealOpenAi() ? await describeVisualWithOpenAI(routed) : await describeVisualMock(routed);
+  const result = shouldUseRealOpenAi()
+    ? await describeVisualWithOpenAI(sanitizeVisualInput(routed))
+    : await describeVisualMock(routed);
   const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
   return {
     ...result,
@@ -118,9 +209,13 @@ export async function describeVisual(input: VisualDescriptionInput): Promise<Vis
 
 /** STEM structured description. Real OpenAI in real mode (self-handling missing config), else mock. */
 export async function describeStemVisual(input: StemDescriptionInput): Promise<StemDescriptionResult> {
+  if (realPupilBlockActive(input.hasLinkedPupil)) return blockedStemResult();
+
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
-  const result = shouldUseRealOpenAi() ? await describeStemWithOpenAI(routed) : await describeStemMock(routed);
+  const result = shouldUseRealOpenAi()
+    ? await describeStemWithOpenAI(sanitizeVisualInput(routed))
+    : await describeStemMock(routed);
   const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
   return {
     ...result,

@@ -124,10 +124,11 @@ When the external Braille OCR adapter returns raw Braille, it optionally invokes
 
 ### Real pupil data safety
 
-Identifiable pupil data must never be sent to a real provider without school data-protection approval. Two protections enforce this:
+Identifiable pupil data must never be sent to a real provider without school data-protection approval. Three protections enforce this:
 
-* **Minimal context only.** AI calls receive title, subject, year group, question prompt, assessed skill, and the image — **never** pupil names or identifiers. The provider input carries only a boolean `hasLinkedPupil`.
-* **Explicit guard.** `assertRealAiDataAllowed` (in `src/lib/ai/safety.ts`) raises a high-severity warning flag when `AI_MODE=real` and a pupil-linked task runs while `ALLOW_REAL_PUPIL_DATA=false`. It warns and audits rather than silently proceeding; it does not block the demo workflow.
+* **Pre-flight block.** When `AI_MODE=real`, a task is pupil-linked, and `ALLOW_REAL_PUPIL_DATA=false`, `transcribeBraille` / `describeVisual` / `describeStemVisual` return a controlled **blocked** result *before* any provider is called — no file or context leaves the app. The result carries a high-severity `real_pupil_data_blocked` flag and still requires specialist verification / human approval, and the block is audited. Mock mode is never affected.
+* **Minimal, sanitised context.** Real-provider calls use minimal, sanitised context and do not send pupil names or identifiers intentionally. Only title, subject, year group, question prompt, assessed skill, and the image are sent — carrying only a boolean `hasLinkedPupil` — and each free-text field is passed through `sanitizeProviderText` (in `src/lib/ai/safety.ts`), which trims, length-limits, and redacts obvious emails / UK phone numbers / UK postcodes.
+* **Explicit guard.** `assertRealAiDataAllowed` (in `src/lib/ai/safety.ts`) remains as defence-in-depth for the same condition.
 
 ### Re-running AI/OCR
 
@@ -323,4 +324,4 @@ Replace `store.ts` with Supabase/Postgres plus Row Level Security, replace local
 * PDF uploads are stored but not rasterised for OCR in this build; they return a high-severity `pdf_processing_pending` flag. Upload a PNG/JPG page image for OCR.
 * Local file persistence is suitable for demos, not serverless production durability.
 * `DEMO_MODE=false` disables the staff picker but still needs a real auth provider implementation.
-* npm audit on 30 June 2026 still recommends a breaking Next 16 migration for remaining advisories; this branch conservatively patches the app to Next 14.2.35.
+* Dependency advisories: as of 2 July 2026, `npm audit` reports 5 advisories (1 moderate, 4 high) that all originate from Next.js 14.2.35 and its bundled `postcss@8.4.31`. The only published fix is a **breaking** upgrade to Next 16, so it is intentionally deferred to a dedicated dependency-upgrade branch (part of the Stage 4 production foundation) rather than forced here — `npm audit fix --force` would migrate the app to Next 16 and risk the demo. The directly-managed `postcss` dev dependency has been patched to `^8.5.16`. None of the advisories affect the offline demo/mock path.

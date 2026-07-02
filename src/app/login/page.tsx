@@ -202,7 +202,7 @@ function SiteFooter() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-center md:flex-row md:text-left">
         <div className="flex flex-col gap-1">
           <span className="font-display text-lg font-bold text-[#002147]">InsightEd AI</span>
-          <span className="text-xs text-[#44474e]">© 2026 InsightEd AI. UK Public Sector Security Compliant.</span>
+          <span className="text-xs text-[#44474e]">© 2026 InsightEd AI. Designed for UK school accessibility workflows.</span>
         </div>
         <div className="flex flex-col items-center gap-3 md:items-end">
           <div className="flex items-center gap-1">
@@ -221,7 +221,7 @@ function SiteFooter() {
           </div>
           <p className="flex items-center gap-1.5 text-xs text-[#44474e]">
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            Demo environment · UK data region · audit logging on
+            Demo environment · audit logging enabled
           </p>
         </div>
       </div>

@@ -93,6 +93,24 @@ export function assessmentContextMissingFlag(): UncertaintyFlag {
   });
 }
 
+/**
+ * High-severity flag when a pupil-linked task is blocked from reaching a real provider
+ * because `ALLOW_REAL_PUPIL_DATA=false`. No file or context was sent to any provider.
+ */
+export function realPupilDataBlockedFlag(): UncertaintyFlag {
+  return makeFlag({
+    text: "Real-provider processing blocked",
+    reason:
+      "This task is linked to a pupil and real AI mode is enabled while ALLOW_REAL_PUPIL_DATA=false. " +
+      "The app did not send the file or context to a real provider. Use mock mode, remove pupil linkage, " +
+      "or obtain school data-protection approval before enabling real-provider processing.",
+    category: "real_pupil_data_blocked",
+    severity: "high",
+    suggestedAction:
+      "Use mock mode, unlink the pupil, or set ALLOW_REAL_PUPIL_DATA=true only after data-protection approval.",
+  });
+}
+
 /** Flag for PDFs that were stored but not yet rasterised for OCR. High severity. */
 export function pdfPendingFlag(): UncertaintyFlag {
   return makeFlag({
@@ -107,6 +125,7 @@ export function pdfPendingFlag(): UncertaintyFlag {
 }
 
 const HIGH_PRIORITY: UncertaintyCategory[] = [
+  "real_pupil_data_blocked",
   "provider_unavailable",
   "processing_failed",
   "pdf_processing_pending",

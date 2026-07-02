@@ -33,6 +33,8 @@ const ACTION_LABEL: Record<string, string> = {
   "export.completed": "exported",
   "data.delete": "secure-deleted",
   "user.role_change": "changed the role of",
+  "staff.role_update": "changed the role of",
+  "staff.braille_literate_update": "updated Braille-literate status for",
   "settings.retention": "updated retention",
   "eval.sample": "added an evaluation sample",
   "eval.sample.delete": "deleted an evaluation sample",

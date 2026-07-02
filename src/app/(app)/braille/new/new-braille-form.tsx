@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Upload, Loader2, Check } from "lucide-react";
 import { Card, CardBody } from "@/components/ui/card";
+import { UploadPdfNote } from "@/components/upload-note";
 import { createBrailleTask } from "../actions";
 
 function SubmitButton() {
@@ -72,6 +73,7 @@ export function NewBrailleForm({ pupils }: { pupils: { id: string; label: string
                 onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
               />
             </label>
+            <UploadPdfNote />
           </Field>
 
           <div className="flex justify-end pt-1">

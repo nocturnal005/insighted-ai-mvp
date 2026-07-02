@@ -2,7 +2,13 @@ import { getBrailleTask, getStemTask, getVisualTask } from "@/lib/data";
 import { pupilLabel, userName } from "@/lib/store";
 import { VISUAL_TYPE_LABELS } from "@/lib/braille-engine";
 
-export type ExportKind = "transcription" | "feedback" | "visual" | "stem";
+export const EXPORT_KINDS = ["transcription", "feedback", "visual", "stem"] as const;
+export type ExportKind = (typeof EXPORT_KINDS)[number];
+
+/** Runtime guard so untrusted query params are never cast straight to ExportKind. */
+export function isExportKind(value: string | null | undefined): value is ExportKind {
+  return value != null && (EXPORT_KINDS as readonly string[]).includes(value);
+}
 
 export interface ExportBlock {
   heading: string;

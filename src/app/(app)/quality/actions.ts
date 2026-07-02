@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
-import { db, id, recordAudit } from "@/lib/store";
+import { db, id, recordAudit, createUpload, getUploadById, deleteUploadById, uploadDataUrl, persistDb } from "@/lib/store";
 import { transcribeBraille, simulateOcrMock, summariseFlags, toStoredFlags, getAiConfig } from "@/lib/ai";
 import { assertValidUpload } from "@/lib/upload-guard";
 import { scorePair } from "@/lib/metrics";
@@ -30,18 +30,12 @@ export async function addEvalSample(formData: FormData) {
   const file = formData.get("image") as File | null;
   if (!label || !groundTruthText) throw new Error("Label and ground-truth text are required");
 
-  let imageDataUrl: string | null = null;
-  if (file && file.size > 0) {
-    assertValidUpload(file);
-    const buf = Buffer.from(await file.arrayBuffer());
-    imageDataUrl = `data:${file.type};base64,${buf.toString("base64")}`;
-  }
-
   const sample: EvalSample = {
     id: id("eval"),
     label,
     groundTruthText,
-    imageDataUrl,
+    uploadId: null,
+    imageDataUrl: null,
     prediction: null,
     cer: null,
     wer: null,
@@ -55,8 +49,26 @@ export async function addEvalSample(formData: FormData) {
     sampleSource: pick<NonNullable<SampleSource>>(formData.get("sampleSource"), ["synthetic", "anonymised_school_sample", "other"], "synthetic"),
     permissionStatus: pick<NonNullable<PermissionStatus>>(formData.get("permissionStatus"), ["synthetic", "anonymised_only", "approved_for_testing", "not_approved"], "synthetic"),
   };
+
+  // Store the image through the tracked Upload model (module "quality") instead of inlining
+  // base64 into db.json — this also writes an `upload.create` audit entry.
+  if (file && file.size > 0) {
+    assertValidUpload(file);
+    const buf = Buffer.from(await file.arrayBuffer());
+    sample.uploadId = createUpload({
+      taskId: sample.id,
+      module: "quality",
+      fileName: file.name,
+      fileType: file.type,
+      byteSize: file.size,
+      data: buf,
+      uploadedBy: user,
+    });
+  }
+
   db.evalSamples.unshift(sample);
-  recordAudit({ actorId: user.id, actorName: user.fullName, action: "eval.sample", objectType: "Eval sample", objectLabel: label });
+  recordAudit({ actorId: user.id, actorName: user.fullName, actorRole: user.role, action: "eval.sample", objectType: "Eval sample", objectLabel: label });
+  persistDb();
 
   redirect("/quality");
 }
@@ -84,12 +96,16 @@ export async function runEvaluation() {
     let aiMode: "mock" | "real";
     let flagSummary: string[];
 
-    if (sample.imageDataUrl) {
+    // Prefer the tracked Upload; fall back to legacy inline imageDataUrl for old records.
+    const upload = sample.uploadId ? getUploadById(sample.uploadId) : undefined;
+    const dataUrl = upload ? uploadDataUrl(upload) : sample.imageDataUrl;
+
+    if (dataUrl) {
       const r = await transcribeBraille({
         taskId: sample.id,
         title: sample.label,
-        mimeType: sample.imageDataUrl.startsWith("data:") ? sample.imageDataUrl.slice(5).split(/[;,]/)[0] : undefined,
-        dataUrl: sample.imageDataUrl,
+        mimeType: dataUrl.startsWith("data:") ? dataUrl.slice(5).split(/[;,]/)[0] : undefined,
+        dataUrl,
       });
       prediction = r.draftText;
       provider = r.meta.provider;
@@ -148,6 +164,8 @@ export async function deleteEvalSample(formData: FormData) {
   const sampleId = String(formData.get("sampleId"));
   const removed = db.evalSamples.find((s) => s.id === sampleId);
   db.evalSamples = db.evalSamples.filter((s) => s.id !== sampleId);
+  // Also remove the associated quality upload (file + metadata), if any.
+  if (removed?.uploadId) deleteUploadById(removed.uploadId);
   recordAudit({
     actorId: user.id,
     actorName: user.fullName,
@@ -156,5 +174,6 @@ export async function deleteEvalSample(formData: FormData) {
     objectType: "Eval sample",
     objectLabel: removed?.label ?? sampleId,
   });
+  persistDb();
   revalidatePath("/quality");
 }

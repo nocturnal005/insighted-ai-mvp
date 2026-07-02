@@ -1,8 +1,14 @@
 import { requireUser } from "@/lib/session";
 import { AppNav } from "@/components/app-nav";
+import { MobileNav } from "@/components/mobile-nav";
 import { ROLE_LABELS } from "@/lib/rbac";
 import { initials } from "@/lib/utils";
 import { signOut } from "@/app/login/actions";
+
+// Every page under this layout depends on the demo session cookie (requireUser),
+// so it must be rendered per-request. Declaring it explicitly keeps the build from
+// attempting static generation of authenticated pages.
+export const dynamic = "force-dynamic";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const user = requireUser();
@@ -21,13 +27,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="rounded-xl border border-zinc-100 bg-zinc-50/80 p-3">
             <p className="eyebrow">Organisation</p>
             <p className="mt-1 text-sm font-medium text-zinc-800">Northgate Secondary</p>
-            <p className="mt-0.5 text-xs text-zinc-400">UK region · audit on</p>
+            <p className="mt-0.5 text-xs text-zinc-400">Demo environment · audit logging enabled</p>
           </div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-zinc-200/80 bg-white/80 px-6 backdrop-blur">
+          <MobileNav role={user.role} />
           <span className="font-semibold tracking-tight text-zinc-900 lg:hidden">InsightEd AI</span>
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden text-right sm:block">

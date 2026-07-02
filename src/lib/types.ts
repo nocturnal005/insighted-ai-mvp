@@ -217,7 +217,7 @@ export interface Upload {
   id: string;
   organisationId: string;
   taskId: string;
-  module: "braille" | "visual" | "stem";
+  module: "braille" | "visual" | "stem" | "quality";
   fileName: string;
   fileType: string;
   byteSize: number;
@@ -253,6 +253,9 @@ export interface EvalSample {
   id: string;
   label: string;
   groundTruthText: string;
+  /** Preferred: the sample image stored as a tracked Upload (module "quality"). */
+  uploadId?: string | null;
+  /** Legacy inline image data — kept only for backwards compatibility with old records. */
   imageDataUrl: string | null;
   prediction: string | null;
   cer: number | null;

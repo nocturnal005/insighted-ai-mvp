@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
-import { buildExport, type ExportKind } from "@/lib/export-content";
+import { buildExport, isExportKind } from "@/lib/export-content";
 import { markExported } from "@/lib/export-record";
 import { PrintActions } from "./print-actions";
+
+// Reads the demo session and stamps an export (audit side effect) — always per-request.
+export const dynamic = "force-dynamic";
 
 /**
  * Print-optimised export view. Opening it stamps the record as exported (audit) and the
@@ -17,8 +20,8 @@ export default function PrintPage({
   searchParams: { kind?: string };
 }) {
   const user = requireUser();
-  const kind = searchParams.kind as ExportKind | undefined;
-  if (!kind || !can(user.role, "export")) notFound();
+  const kind = searchParams.kind;
+  if (!isExportKind(kind) || !can(user.role, "export")) notFound();
 
   const { doc, error } = buildExport(kind, params.id);
   if (error || !doc) {
