@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "validate:mvp": "node scripts/validate-mvp.mjs",
     "validate:ai": "node scripts/validate-ai.mjs",
+    "validate:demo": "node scripts/validate-demo.mjs",
     "seed": "node scripts/reset-demo.mjs",
     "reset:demo": "node scripts/reset-demo.mjs"
   },
