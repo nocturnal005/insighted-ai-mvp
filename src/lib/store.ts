@@ -35,7 +35,9 @@ interface Db {
 }
 
 const ORG = "org_northgate";
-const DATA_DIR = join(process.cwd(), ".insighted-data");
+// INSIGHTED_DATA_DIR lets validation harnesses run against an isolated throwaway
+// store instead of the local demo data. Unset in normal use.
+const DATA_DIR = process.env.INSIGHTED_DATA_DIR || join(process.cwd(), ".insighted-data");
 const UPLOAD_DIR = join(DATA_DIR, "uploads");
 const DB_FILE = join(DATA_DIR, "db.json");
 

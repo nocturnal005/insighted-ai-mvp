@@ -111,6 +111,26 @@ Response (validated with `zod`):
 
 A missing endpoint returns a `provider_unavailable` draft; a failed call returns a `processing_failed` draft. Both still require specialist verification.
 
+### Standalone Braille OCR engine (local integration)
+
+A dedicated draft-only Braille OCR engine exists as a **separate standalone project**
+(`insighted-braille-ocr-engine`, developed at `D:\insighted-braille-ocr-engine` /
+[github.com/nocturnal005/insighted-braille-ocr-engine](https://github.com/nocturnal005/insighted-braille-ocr-engine)).
+It is never bundled into this app; InsightEd AI connects to it only through the
+`external_braille_ocr` adapter above.
+
+Key points:
+
+- The engine's output is **draft-only**. It never claims certified Braille accuracy, and
+  this app always holds the result for **mandatory QTVI/Braille-literate specialist
+  verification** before teacher feedback or export.
+- `npm run validate:external-ocr` covers the adapter contract and workflow gates using a
+  local **mock** engine — the real engine is *not* required for normal validation or CI.
+- `npm run validate:external-ocr:live` optionally tests against the real engine and
+  requires it running separately on port 8000 with `OCR_ENGINE_API_KEY=local-test-key`
+  (a local throwaway value — configure real secrets only via untracked env files).
+- Use **synthetic/demo Braille images only** in local tests. Never upload real pupil data.
+
 ### Liblouis-ready back-translation
 
 `braille-translation-provider.ts` defines a clean `BrailleTranslationProvider` interface for converting detected Braille (Unicode dot patterns or cell arrays) **into** print text. This is back-translation that runs **after** a dot/cell-detection OCR stage — it is **not** an image OCR engine and cannot read a photograph on its own.
@@ -149,9 +169,12 @@ The evaluation harness (`/quality`) scores the active engine with CER/WER. Sampl
 ### Validation commands
 
 ```bash
-npm run validate:ai     # AI/OCR behavioural guarantees (provider routing, fallbacks, caps, safety)
-npm run validate:mvp    # workflow/RBAC + AI/OCR presence & no-old-mock-calls checks
-npm run validate:demo   # demo-readiness: demo docs/resources present, gates & wording intact
+npm run validate                    # aggregate: mvp + ai + demo + external-ocr
+npm run validate:ai                 # AI/OCR behavioural guarantees (provider routing, fallbacks, caps, safety)
+npm run validate:mvp                # workflow/RBAC + AI/OCR presence & no-old-mock-calls checks
+npm run validate:demo               # demo-readiness: demo docs/resources present, gates & wording intact
+npm run validate:external-ocr       # external_braille_ocr contract + workflow gates via a local mock engine (boots its own app instance on port 3993 — stop any running `next dev` first; the real engine is NOT required)
+npm run validate:external-ocr:live  # OPTIONAL: live check against the real standalone engine (start it separately on port 8000 with OCR_ENGINE_API_KEY=local-test-key)
 npm run typecheck
 npm run build
 ```

@@ -9,9 +9,12 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "validate": "npm run validate:mvp && npm run validate:ai && npm run validate:demo && npm run validate:external-ocr",
     "validate:mvp": "node scripts/validate-mvp.mjs",
     "validate:ai": "node scripts/validate-ai.mjs",
     "validate:demo": "node scripts/validate-demo.mjs",
+    "validate:external-ocr": "node scripts/validate-external-ocr.mjs",
+    "validate:external-ocr:live": "node scripts/validate-external-ocr-live.mjs",
     "seed": "node scripts/reset-demo.mjs",
     "reset:demo": "node scripts/reset-demo.mjs"
   },
