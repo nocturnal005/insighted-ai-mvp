@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ScanText, Clock, CheckCircle2, XCircle, Plus, ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/session";
+import { ROLE_LABELS } from "@/lib/rbac";
 import { getDashboardStats } from "@/lib/data";
 import { pupilLabel } from "@/lib/store";
 import { Card } from "@/components/ui/card";
@@ -11,12 +12,11 @@ import { formatRelative } from "@/lib/utils";
 export default function DashboardPage() {
   const user = requireUser();
   const stats = getDashboardStats();
-  const firstName = user.fullName.split(" ")[0];
 
   return (
     <>
       <PageHeader
-        title={`Good to see you, ${firstName}`}
+        title={`Good to see you, ${ROLE_LABELS[user.role]}`}
         description="Here is what needs your team's attention today."
         action={
           <Link

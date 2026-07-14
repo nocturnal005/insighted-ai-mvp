@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { ScrollText } from "lucide-react";
 import { requireUser } from "@/lib/session";
-import { can } from "@/lib/rbac";
+import { ROLE_INITIALS, can, staffLabel } from "@/lib/rbac";
 import { getAudit } from "@/lib/data";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
-import { formatRelative, initials } from "@/lib/utils";
+import { formatRelative } from "@/lib/utils";
 
 const ACTION_LABEL: Record<string, string> = {
   "task.create": "created a task",
@@ -65,11 +65,11 @@ export default function AuditPage() {
             {entries.map((e) => (
               <li key={e.id} className="flex items-center gap-3.5 px-5 py-3.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[11px] font-semibold text-zinc-500">
-                  {initials(e.actorName)}
+                  {e.actorRole ? ROLE_INITIALS[e.actorRole] : "—"}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-zinc-700">
-                    <span className="font-medium text-zinc-900">{e.actorName}</span>{" "}
+                    <span className="font-medium text-zinc-900">{staffLabel(e.actorRole)}</span>{" "}
                     {ACTION_LABEL[e.action] ?? e.action}{" "}
                     <span className="font-medium text-zinc-900">{e.objectLabel}</span>
                   </p>

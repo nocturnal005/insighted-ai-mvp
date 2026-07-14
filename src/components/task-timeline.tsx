@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock3 } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRelative } from "@/lib/utils";
+import { staffLabel } from "@/lib/rbac";
 import type { AuditEntry } from "@/lib/types";
 
 const ACTION_LABEL: Record<string, string> = {
@@ -54,7 +55,7 @@ export function TaskTimeline({ entries }: { entries: AuditEntry[] }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-zinc-900">{ACTION_LABEL[entry.action] ?? entry.action}</p>
                   <p className="mt-0.5 text-xs text-zinc-500">
-                    {entry.actorName}
+                    {staffLabel(entry.actorRole)}
                     {entry.previousStatus && entry.newStatus ? ` - ${entry.previousStatus} to ${entry.newStatus}` : ""}
                     {entry.reason ? ` - ${entry.reason}` : ""}
                   </p>
