@@ -1,0 +1,8 @@
+# The Braille OCR engine, installed straight from its own repository so this
+# repo holds no copy of the OCR logic to drift out of sync. Pinned to main:
+# bump to a tag once the engine starts cutting releases.
+#
+# Only the runtime dependencies come with it (NumPy, OpenCV-headless, Pillow,
+# pydantic) — uvicorn is excluded via the engine's optional `serve` extra,
+# keeping this function inside Vercel's 250 MB limit (measured: ~177 MB).
+insighted-braille-ocr @ git+https://github.com/nocturnal005/insighted-braille-ocr-engine.git@main
