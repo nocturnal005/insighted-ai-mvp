@@ -10,6 +10,7 @@ import type {
   VisualDescriptionTask,
 } from "@/lib/types";
 import { scorePair } from "@/lib/metrics";
+import { ROLE_STAFF_LABEL } from "@/lib/rbac";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -84,11 +85,11 @@ function seed(): Db {
   const iso = (minsAgo: number) => new Date(now - minsAgo * 60000).toISOString();
 
   const users: User[] = [
-    { id: "u_amelia", organisationId: ORG, fullName: "Amelia Stone", role: "teaching_assistant", email: "amelia@northgate.sch.uk", brailleLiterate: true },
-    { id: "u_david", organisationId: ORG, fullName: "David Okafor", role: "teacher", email: "david@northgate.sch.uk" },
-    { id: "u_priya", organisationId: ORG, fullName: "Priya Sharma", role: "qtvi", email: "priya@northgate.sch.uk" },
-    { id: "u_helen", organisationId: ORG, fullName: "Helen Wright", role: "senco", email: "helen@northgate.sch.uk" },
-    { id: "u_marcus", organisationId: ORG, fullName: "Marcus Bell", role: "admin", email: "marcus@northgate.sch.uk" },
+    { id: "u_amelia", organisationId: ORG, fullName: "TA Staff", role: "teaching_assistant", email: "ta@northgate.sch.uk", brailleLiterate: true },
+    { id: "u_david", organisationId: ORG, fullName: "Teaching Staff", role: "teacher", email: "teacher@northgate.sch.uk" },
+    { id: "u_priya", organisationId: ORG, fullName: "QTVI Staff", role: "qtvi", email: "qtvi@northgate.sch.uk" },
+    { id: "u_helen", organisationId: ORG, fullName: "SENCO Staff", role: "senco", email: "senco@northgate.sch.uk" },
+    { id: "u_marcus", organisationId: ORG, fullName: "Admin Staff", role: "admin", email: "admin@northgate.sch.uk" },
   ];
 
   const pupils: Pupil[] = [
@@ -223,7 +224,7 @@ function seed(): Db {
       cer: histScore.cer,
       wer: histScore.wer,
       engine: "mock-v1",
-      verifiedByName: "David Okafor",
+      verifiedByName: "Teaching Staff",
       createdAt: iso(174),
     },
   ];
@@ -240,17 +241,17 @@ function seed(): Db {
       cer: null,
       wer: null,
       lastRunAt: null,
-      createdByName: "Priya Sharma",
+      createdByName: "QTVI Staff",
       createdAt: iso(200),
     },
   ];
 
   const audit: AuditEntry[] = [
-    { id: "a1", organisationId: ORG, actorId: "u_priya", actorName: "Priya Sharma", actorRole: "qtvi", action: "transcription.specialist_verify", objectType: "Braille review", objectLabel: "Battle of Hastings", taskId: "bt_1001", previousStatus: "needs_specialist_review", newStatus: "specialist_verified", createdAt: iso(180) },
-    { id: "a2", organisationId: ORG, actorId: "u_david", actorName: "David Okafor", actorRole: "teacher", action: "feedback.approve", objectType: "Feedback report", objectLabel: "Battle of Hastings", taskId: "bt_1001", previousStatus: "teacher_review", newStatus: "approved", createdAt: iso(174) },
-    { id: "a3", organisationId: ORG, actorId: "u_david", actorName: "David Okafor", actorRole: "teacher", action: "export.completed", objectType: "Feedback report", objectLabel: "Battle of Hastings", taskId: "bt_1001", createdAt: iso(170) },
-    { id: "a4", organisationId: ORG, actorId: "u_priya", actorName: "Priya Sharma", actorRole: "qtvi", action: "visual.approve", objectType: "Visual description", objectLabel: "Distance/time graph", taskId: "vd_2001", previousStatus: "draft", newStatus: "approved", createdAt: iso(60) },
-    { id: "a5", organisationId: ORG, actorId: "u_amelia", actorName: "Amelia Stone", actorRole: "teaching_assistant", action: "task.create", objectType: "Braille review", objectLabel: "The water cycle", taskId: "bt_1002", newStatus: "needs_specialist_review", createdAt: iso(90) },
+    { id: "a1", organisationId: ORG, actorId: "u_priya", actorName: "QTVI Staff", actorRole: "qtvi", action: "transcription.specialist_verify", objectType: "Braille review", objectLabel: "Battle of Hastings", taskId: "bt_1001", previousStatus: "needs_specialist_review", newStatus: "specialist_verified", createdAt: iso(180) },
+    { id: "a2", organisationId: ORG, actorId: "u_david", actorName: "Teaching Staff", actorRole: "teacher", action: "feedback.approve", objectType: "Feedback report", objectLabel: "Battle of Hastings", taskId: "bt_1001", previousStatus: "teacher_review", newStatus: "approved", createdAt: iso(174) },
+    { id: "a3", organisationId: ORG, actorId: "u_david", actorName: "Teaching Staff", actorRole: "teacher", action: "export.completed", objectType: "Feedback report", objectLabel: "Battle of Hastings", taskId: "bt_1001", createdAt: iso(170) },
+    { id: "a4", organisationId: ORG, actorId: "u_priya", actorName: "QTVI Staff", actorRole: "qtvi", action: "visual.approve", objectType: "Visual description", objectLabel: "Distance/time graph", taskId: "vd_2001", previousStatus: "draft", newStatus: "approved", createdAt: iso(60) },
+    { id: "a5", organisationId: ORG, actorId: "u_amelia", actorName: "TA Staff", actorRole: "teaching_assistant", action: "task.create", objectType: "Braille review", objectLabel: "The water cycle", taskId: "bt_1002", newStatus: "needs_specialist_review", createdAt: iso(90) },
   ];
 
   return { users, pupils, brailleTasks, visualTasks, stemTasks, uploads: [], corrections, evalSamples, audit, settings: { retentionDays: 365, trainOnData: false } };
@@ -435,9 +436,15 @@ export function findUser(userId: string): User | undefined {
   return db.users.find((u) => u.id === userId);
 }
 
+/**
+ * Display label for a staff member. Derived from the user's ROLE rather than any
+ * stored personal name, so identities stay role-based everywhere (including for
+ * records written before this convention).
+ */
 export function userName(userId: string | null): string {
   if (!userId) return "—";
-  return db.users.find((u) => u.id === userId)?.fullName ?? "Unknown";
+  const user = db.users.find((u) => u.id === userId);
+  return user ? ROLE_STAFF_LABEL[user.role] : "Unknown";
 }
 
 export function pupilLabel(pupilId: string | null): string | null {

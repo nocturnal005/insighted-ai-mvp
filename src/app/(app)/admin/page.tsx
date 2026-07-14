@@ -2,9 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Trash2, FileText, ShieldCheck } from "lucide-react";
 import { requireUser } from "@/lib/session";
-import { can, ROLE_LABELS, ALL_ROLES } from "@/lib/rbac";
+import { can, ROLE_LABELS, ROLE_INITIALS, ROLE_STAFF_LABEL, ALL_ROLES } from "@/lib/rbac";
 import { getUsers, getSettings } from "@/lib/data";
-import { initials } from "@/lib/utils";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { secureDeleteExpiredMaterial, setUserRole, setRetention, setBrailleLiterate } from "./actions";
@@ -27,10 +26,10 @@ export default function AdminPage() {
           <ul className="divide-y divide-zinc-100">
             {users.map((u) => (
               <li key={u.id} className="flex items-center gap-3.5 px-5 py-3.5">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-100 text-[11px] font-semibold text-accent-700">{initials(u.fullName)}</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-100 text-[11px] font-semibold text-accent-700">{ROLE_INITIALS[u.role]}</span>
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 text-sm font-medium text-zinc-900">
-                    {u.fullName}
+                    {ROLE_STAFF_LABEL[u.role]}
                     {u.brailleLiterate && (
                       <span
                         title="Explicitly Braille-literate — may specialist-verify Braille accuracy even as a Teaching Assistant"

@@ -53,6 +53,34 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin",
 };
 
+/**
+ * How a staff member is identified anywhere in the UI. Staff are shown by role,
+ * never by personal name — mirroring how pupils are shown by reference code
+ * (VI-2026-001) rather than by name. Reads naturally in attribution, e.g.
+ * "Uploaded by QTVI Staff".
+ */
+export const ROLE_STAFF_LABEL: Record<UserRole, string> = {
+  teaching_assistant: "TA Staff",
+  teacher: "Teaching Staff",
+  qtvi: "QTVI Staff",
+  senco: "SENCO Staff",
+  admin: "Admin Staff",
+};
+
+/** Short code shown in avatar circles, in place of personal initials. */
+export const ROLE_INITIALS: Record<UserRole, string> = {
+  teaching_assistant: "TA",
+  teacher: "TE",
+  qtvi: "QT",
+  senco: "SE",
+  admin: "AD",
+};
+
+/** Staff label for a possibly-unknown role (older audit rows may omit it). */
+export function staffLabel(role: UserRole | undefined): string {
+  return role ? ROLE_STAFF_LABEL[role] : "Staff";
+}
+
 export const ROLE_BLURB: Record<UserRole, string> = {
   teaching_assistant: "Uploads work, prepares drafts",
   teacher: "Reviews verified English work and approves subject feedback",

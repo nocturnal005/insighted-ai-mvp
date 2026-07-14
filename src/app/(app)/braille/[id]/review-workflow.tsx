@@ -147,9 +147,6 @@ export function ReviewWorkflow({ task, upload, permissions }: { task: BrailleTas
             {!verified && (
               <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>This is an AI/OCR draft. It must be checked by a QTVI or Braille-literate specialist before teacher feedback or export.</span></div>
             )}
-            {!verified && t.lowConfidenceRegions.length > 0 && (
-              <div className="flex flex-wrap gap-2">{t.lowConfidenceRegions.map((r, i) => (<span key={i} title={r.reason} className="inline-flex items-center gap-1.5 rounded-lg border border-caution-200/60 bg-caution-50 px-2.5 py-1 text-xs text-caution-700"><span className="font-medium">“{r.text}”</span><span className="text-caution-600/70">{r.reason}</span></span>))}</div>
-            )}
             <div>
               <label htmlFor="transcript" className="mb-1.5 block text-sm font-medium text-zinc-700">English transcription</label>
               <textarea id="transcript" value={transcriptValue} onChange={(e) => setText(e.target.value)} readOnly={verified || !permissions.canEdit} rows={7} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
