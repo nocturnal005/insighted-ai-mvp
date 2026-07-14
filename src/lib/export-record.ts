@@ -1,15 +1,18 @@
 import { getBrailleTask, getStemTask, getVisualTask } from "@/lib/data";
 import { recordAudit } from "@/lib/store";
+import { hydrateBrailleTask, persistBrailleTask } from "@/lib/durable-braille";
 import type { ExportKind } from "@/lib/export-content";
 import type { User } from "@/lib/types";
 
 /** Stamp a record as exported and write the audit entry. Idempotent enough for a demo. */
-export function markExported(kind: ExportKind, id: string, user: User, title: string, completed = true): void {
+export async function markExported(kind: ExportKind, id: string, user: User, title: string, completed = true): Promise<void> {
   const at = new Date().toISOString();
+  let durableBrailleTask = null;
   if (completed) {
     if (kind === "transcription" || kind === "feedback") {
-      const t = getBrailleTask(id);
+      const t = (await hydrateBrailleTask(id)) ?? getBrailleTask(id);
       if (t) t.exportedAt = at;
+      durableBrailleTask = t ?? null;
     } else if (kind === "visual") {
       const v = getVisualTask(id);
       if (v) v.exportedAt = at;
@@ -34,4 +37,9 @@ export function markExported(kind: ExportKind, id: string, user: User, title: st
     objectLabel: title,
     taskId: id,
   });
+
+  if (kind === "transcription" || kind === "feedback") {
+    durableBrailleTask ??= (await hydrateBrailleTask(id)) ?? getBrailleTask(id) ?? null;
+    if (durableBrailleTask) await persistBrailleTask(durableBrailleTask);
+  }
 }

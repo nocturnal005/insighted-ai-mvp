@@ -111,18 +111,16 @@ export async function transcribeBrailleExternal(input: BrailleOcrInput): Promise
     const parsed = responseSchema.parse(JSON.parse(bodyText));
     const modelFlags = (parsed.flags ?? []).map(toFlag);
 
-    // Optional Liblouis back-translation when the engine returns raw Braille. We record
-    // whether it was available; we do not override the engine's own draftText.
+    // Optional Liblouis back-translation when the engine returns raw Braille. A missing
+    // optional cross-check must not mark the primary OCR provider as unavailable.
     const backTranslationFlags: UncertaintyFlag[] = [];
     if (parsed.rawBraille) {
       const bt = await getBrailleTranslationProvider().backTranslate({ rawBraille: parsed.rawBraille });
-      backTranslationFlags.push(
+      if (bt.available) backTranslationFlags.push(
         makeFlag({
-          text: bt.available ? "Liblouis back-translation available" : "Liblouis back-translation unavailable",
-          reason: bt.available
-            ? "Raw Braille was returned and a Liblouis back-translation ran for cross-checking."
-            : "Raw Braille was returned but Liblouis back-translation is not enabled/configured.",
-          category: bt.available ? "subject_specific_term" : "provider_unavailable",
+          text: "Liblouis back-translation available",
+          reason: "Raw Braille was returned and a Liblouis back-translation ran for cross-checking.",
+          category: "subject_specific_term",
           severity: "low",
         }),
       );
