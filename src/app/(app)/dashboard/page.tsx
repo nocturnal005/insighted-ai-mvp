@@ -8,8 +8,10 @@ import { Card } from "@/components/ui/card";
 import { TaskBadge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { formatRelative } from "@/lib/utils";
+import { hydrateBrailleTasks } from "@/lib/durable-braille";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  await hydrateBrailleTasks();
   const user = requireUser();
   const stats = getDashboardStats();
 

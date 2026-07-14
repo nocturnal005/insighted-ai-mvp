@@ -9,10 +9,11 @@ import { TaskBadge } from "@/components/ui/badge";
 import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
 import { ReviewWorkflow } from "./review-workflow";
+import { hydrateBrailleTask } from "@/lib/durable-braille";
 
-export default function BrailleDetailPage({ params }: { params: { id: string } }) {
+export default async function BrailleDetailPage({ params }: { params: { id: string } }) {
   const user = requireUser();
-  const task = getBrailleTask(params.id);
+  const task = (await hydrateBrailleTask(params.id)) ?? getBrailleTask(params.id);
   if (!task) notFound();
 
   const up = getTaskUpload(task.id);

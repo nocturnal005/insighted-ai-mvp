@@ -14,3 +14,5 @@ npm-debug.log*
 tsconfig.tsbuildinfo
 .vscode/*
 .idea
+.vercel
+.env*

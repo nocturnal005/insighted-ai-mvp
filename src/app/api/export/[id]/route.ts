@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { buildExport, docToPlainText, isExportKind } from "@/lib/export-content";
 import { markExported } from "@/lib/export-record";
+import { hydrateBrailleTask } from "@/lib/durable-braille";
 
 // Reads the demo session cookie — never statically cached.
 export const dynamic = "force-dynamic";
@@ -18,11 +19,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
   const kind = new URL(request.url).searchParams.get("kind");
   if (!isExportKind(kind)) return NextResponse.json({ error: "Invalid or missing export kind" }, { status: 400 });
+  if (kind === "transcription" || kind === "feedback") await hydrateBrailleTask(params.id);
 
   const { doc, error } = buildExport(kind, params.id);
   if (error || !doc) return NextResponse.json({ error: error ?? "Not found" }, { status: 409 });
 
-  markExported(kind, params.id, user, doc.title);
+  await markExported(kind, params.id, user, doc.title);
 
   return new NextResponse(docToPlainText(doc), {
     status: 200,

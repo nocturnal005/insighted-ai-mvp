@@ -6,8 +6,10 @@ import { Card } from "@/components/ui/card";
 import { TaskBadge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { formatRelative } from "@/lib/utils";
+import { hydrateBrailleTasks } from "@/lib/durable-braille";
 
-export default function BrailleListPage() {
+export default async function BrailleListPage() {
+  await hydrateBrailleTasks();
   const tasks = getBrailleTasks();
 
   return (

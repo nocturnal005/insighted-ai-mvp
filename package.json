@@ -15,10 +15,12 @@
     "validate:demo": "node scripts/validate-demo.mjs",
     "validate:external-ocr": "node scripts/validate-external-ocr.mjs",
     "validate:external-ocr:live": "node scripts/validate-external-ocr-live.mjs",
+    "verify:neon": "node scripts/verify-neon-persistence.mjs",
     "seed": "node scripts/reset-demo.mjs",
     "reset:demo": "node scripts/reset-demo.mjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.439.0",
     "next": "^14.2.35",

@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { db, id, recordAudit, createUpload, recordCorrection, uploadDataUrl } from "@/lib/store";
-import { getBrailleTask, getTaskUpload, getPupil } from "@/lib/data";
+import { getTaskUpload, getPupil } from "@/lib/data";
+import { hydrateBrailleTask, persistBrailleTask } from "@/lib/durable-braille";
 import { transcribeBraille, mapFlagsToLowConfidenceRegions, summariseFlags, toStoredFlags } from "@/lib/ai";
 import { assertValidUpload } from "@/lib/upload-guard";
 import { generateFeedback } from "@/lib/feedback";
@@ -65,6 +66,7 @@ export async function createBrailleTask(formData: FormData) {
     });
   }
 
+  await persistBrailleTask(task);
   redirect(`/braille/${task.id}`);
 }
 
@@ -143,12 +145,13 @@ async function executeTranscription(
     flagSummary: summariseFlags(result.flags),
     reason: reason ?? null,
   });
+  await persistBrailleTask(task);
   revalidatePath(`/braille/${task.id}`);
 }
 
 export async function runTranscription(taskId: string) {
   const user = requireUser();
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task) throw new Error("Task not found");
   await executeTranscription(user, task);
 }
@@ -160,7 +163,7 @@ export async function runTranscription(taskId: string) {
  */
 export async function rerunBrailleTranscription(taskId: string) {
   const user = requireUser();
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task) throw new Error("Task not found");
   if (task.status === "rejected" || task.status === "archived") throw new Error("Task is closed");
 
@@ -177,7 +180,7 @@ export async function rerunBrailleTranscription(taskId: string) {
 export async function saveTranscription(taskId: string, editedText: string) {
   const user = requireUser();
   if (!can(user.role, "transcription.edit")) throw new Error("Not permitted");
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription) throw new Error("Nothing to edit");
   if (task.transcription.status === "specialist_verified") throw new Error("Already verified and locked");
 
@@ -192,6 +195,7 @@ export async function saveTranscription(taskId: string, editedText: string) {
     objectLabel: task.title,
     taskId: task.id,
   });
+  await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
 }
 
@@ -200,7 +204,7 @@ export async function verifyTranscription(taskId: string, finalText: string, spe
   if (!can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate })) {
     throw new Error("Only QTVI, admin, or explicitly Braille-literate staff can verify Braille accuracy");
   }
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription) throw new Error("Nothing to verify");
 
   const previousStatus = task.status;
@@ -235,13 +239,14 @@ export async function verifyTranscription(taskId: string, finalText: string, spe
     verifiedByName: user.fullName,
   });
 
+  await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
 }
 
 export async function createFeedback(taskId: string) {
   const user = requireUser();
   if (!can(user.role, "feedback.generate")) throw new Error("Not permitted");
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription || task.transcription.status !== "specialist_verified" || !task.transcription.finalText) {
     throw new Error("Specialist verification is required before teacher feedback");
   }
@@ -277,6 +282,7 @@ export async function createFeedback(taskId: string) {
     previousStatus,
     newStatus: task.status,
   });
+  await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
 }
 
@@ -284,7 +290,7 @@ export async function createFeedback(taskId: string) {
 export async function saveFeedback(taskId: string, teacherComments: string, learnerSummary: string) {
   const user = requireUser();
   if (!can(user.role, "feedback.generate")) throw new Error("Not permitted");
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task?.feedback) throw new Error("No feedback to edit");
   if (task.feedback.status === "approved") throw new Error("Feedback already approved and locked");
 
@@ -301,6 +307,7 @@ export async function saveFeedback(taskId: string, teacherComments: string, lear
     objectLabel: task.title,
     taskId: task.id,
   });
+  await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
 }
 
@@ -308,7 +315,7 @@ export async function saveFeedback(taskId: string, teacherComments: string, lear
 export async function approveFeedback(taskId: string) {
   const user = requireUser();
   if (!can(user.role, "feedback.approve")) throw new Error("Only a teacher or QTVI can approve");
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task?.feedback) throw new Error("No feedback to approve");
 
   const previousStatus = task.status;
@@ -335,13 +342,14 @@ export async function approveFeedback(taskId: string) {
     previousStatus,
     newStatus: task.status,
   });
+  await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
 }
 
 export async function rejectBrailleTask(taskId: string, reason: string) {
   const user = requireUser();
   if (!can(user.role, "task.reject")) throw new Error("Not permitted");
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task) throw new Error("Not found");
 
   const previousStatus = task.status;
@@ -360,13 +368,14 @@ export async function rejectBrailleTask(taskId: string, reason: string) {
     newStatus: task.status,
     reason: task.rejectionReason,
   });
+  await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
 }
 
 export async function archiveBrailleTask(taskId: string) {
   const user = requireUser();
   if (!can(user.role, "task.archive")) throw new Error("Not permitted");
-  const task = getBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId);
   if (!task) throw new Error("Not found");
 
   const previousStatus = task.status;
@@ -383,5 +392,6 @@ export async function archiveBrailleTask(taskId: string) {
     previousStatus,
     newStatus: task.status,
   });
+  await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
 }
