@@ -71,7 +71,7 @@ export function getAiConfig(): AiConfig {
     visionModel: readEnv("OPENAI_VISION_MODEL") ?? DEFAULT_VISION_MODEL,
     textModel: readEnv("OPENAI_TEXT_MODEL") ?? DEFAULT_TEXT_MODEL,
     hasOpenAiKey: Boolean(readEnv("OPENAI_API_KEY")),
-    hasBrailleEndpoint: Boolean(readEnv("BRAILLE_OCR_ENDPOINT")),
+    hasBrailleEndpoint: Boolean(readEnv("BRAILLE_OCR_ENDPOINT") ?? inAppBrailleEndpoint()),
     allowRealPupilData: readEnv("ALLOW_REAL_PUPIL_DATA") === "true",
   };
 }
@@ -87,10 +87,24 @@ export function getOpenAiKey(): string | undefined {
   return readEnv("OPENAI_API_KEY");
 }
 
+/**
+ * Where the Braille OCR engine lives.
+ *
+ * The engine ships with this deployment as a Python serverless function
+ * (`api/ocr.py`), so on Vercel it is reachable on our own origin and needs no
+ * configuration — one deployment, one URL, nothing separate to host or wake.
+ * BRAILLE_OCR_ENDPOINT still wins when set, which is how local development
+ * points at the standalone engine on localhost.
+ */
+function inAppBrailleEndpoint(): string | undefined {
+  const host = readEnv("VERCEL_URL");
+  return host ? `https://${host}/api/ocr` : undefined;
+}
+
 /** Server-only Braille OCR endpoint + key. Never expose to the client. */
 export function getBrailleEndpointConfig(): { endpoint?: string; apiKey?: string; timeoutMs: number } {
   return {
-    endpoint: readEnv("BRAILLE_OCR_ENDPOINT"),
+    endpoint: readEnv("BRAILLE_OCR_ENDPOINT") ?? inAppBrailleEndpoint(),
     apiKey: readEnv("BRAILLE_OCR_API_KEY"),
     timeoutMs: parsePositiveInt(readEnv("BRAILLE_OCR_TIMEOUT_MS"), DEFAULT_BRAILLE_OCR_TIMEOUT_MS),
   };
