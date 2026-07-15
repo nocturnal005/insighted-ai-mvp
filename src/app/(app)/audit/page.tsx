@@ -6,6 +6,7 @@ import { getAudit } from "@/lib/data";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { formatRelative } from "@/lib/utils";
+import { isPrivateProviderIdentity } from "@/lib/ai/provider-visibility";
 
 const ACTION_LABEL: Record<string, string> = {
   "task.create": "created a task",
@@ -77,8 +78,14 @@ export default function AuditPage() {
                     {e.objectType}
                     {e.previousStatus && e.newStatus ? ` - ${e.previousStatus} to ${e.newStatus}` : ""}
                     {e.reason ? ` - ${e.reason}` : ""}
-                    {e.provider ? ` - ${e.aiMode ?? "?"}/${e.provider}${e.model ? `/${e.model}` : ""}${e.confidence != null ? ` ${Math.round(e.confidence * 100)}%` : ""}` : ""}
-                    {e.promptVersion ? ` · ${e.promptVersion}` : ""}
+                    {e.provider && !isPrivateProviderIdentity(e.provider)
+                      ? ` - ${e.aiMode ?? "?"}/${e.provider}${e.model ? `/${e.model}` : ""}${
+                          e.confidence != null
+                            ? ` ${Math.round(e.confidence * 100)}%`
+                            : ""
+                        }`
+                      : ""}
+                    {e.promptVersion && !isPrivateProviderIdentity(e.provider) ? ` · ${e.promptVersion}` : ""}
                     {e.flagSummary && e.flagSummary.length > 0 ? ` · flags: ${e.flagSummary.join(", ")}` : ""}
                   </p>
                 </div>

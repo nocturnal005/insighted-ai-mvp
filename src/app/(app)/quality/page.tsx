@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { getCorrections, getEvalSamples, getQualityStats } from "@/lib/data";
 import { getAiConfig } from "@/lib/ai";
+import { isPrivateProviderIdentity } from "@/lib/ai/provider-visibility";
 import { pct } from "@/lib/metrics";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
@@ -32,10 +33,8 @@ export default function QualityPage() {
         <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" />
         {ai.mode === "real" ? (
           <span>
-            AI mode: <span className="font-medium">real</span>. Braille OCR provider{" "}
-            <span className="font-medium">{ai.brailleOcrProvider}</span> (model {ai.visionModel}). Samples
-            with an image are scored against this provider; text-only samples fall back to labelled mock
-            simulation.
+            AI mode: <span className="font-medium">real</span>. Samples with an image are scored by the
+            configured OCR service; text-only samples fall back to labelled mock simulation.
           </span>
         ) : (
           <span>
@@ -71,7 +70,6 @@ export default function QualityPage() {
             <Metric label="Average CER" value={pct(stats.evalAvgCer)} />
             <Metric label="Average WER" value={pct(stats.evalAvgWer)} />
             <Metric label="Average confidence" value={stats.evalAvgConfidence == null ? "—" : `${Math.round(stats.evalAvgConfidence * 100)}%`} />
-            <Metric label="By provider" value={stats.byProvider.map((p) => `${p.key}: ${p.count}`).join(", ") || "—"} />
             <Metric label="By Braille type" value={stats.byBrailleType.map((b) => `${b.key}: ${b.count}`).join(", ") || "—"} />
             <Metric label="Common flags" value={stats.topFlagCategories.map((f) => `${f.key} (${f.count})`).join(", ") || "—"} />
           </CardBody>
@@ -135,7 +133,11 @@ export default function QualityPage() {
                       {s.lastRunAt && (
                         <p className="mt-0.5 text-[11px] text-zinc-400">
                           Run {formatRelative(s.lastRunAt)}
-                          {s.provider ? ` · ${s.aiMode ?? "?"} · ${s.provider}/${s.model ?? "?"}` : ""}
+                          {s.provider
+                            ? isPrivateProviderIdentity(s.provider)
+                              ? ` · ${s.aiMode ?? "?"} · live transcription`
+                              : ` · ${s.aiMode ?? "?"} · ${s.provider}/${s.model ?? "?"}`
+                            : ""}
                           {s.confidence != null ? ` · ${Math.round(s.confidence * 100)}% conf` : ""}
                         </p>
                       )}

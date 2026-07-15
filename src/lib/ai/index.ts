@@ -27,6 +27,7 @@ import {
   transcribeBrailleWithOpenAIDraft,
 } from "./providers/openai-vision-provider";
 import { transcribeBrailleExternal } from "./providers/external-braille-provider";
+import { transcribeBrailleWithAbc } from "./providers/abc-braille-provider";
 
 import { assertRealAiDataAllowed, sanitizeProviderText } from "./safety";
 
@@ -59,6 +60,14 @@ function pupilSafetyFlags(hasLinkedPupil: boolean | undefined, objectLabel: stri
 function realPupilBlockActive(hasLinkedPupil?: boolean): boolean {
   const c = getAiConfig();
   return c.mode === "real" && Boolean(hasLinkedPupil) && !c.allowRealPupilData;
+}
+
+function realBraillePupilBlockActive(hasLinkedPupil?: boolean): boolean {
+  const c = getAiConfig();
+  const usesRealProvider =
+    c.brailleOcrProvider === "abc_braille_web" ||
+    (c.mode === "real" && c.brailleOcrProvider !== "mock");
+  return usesRealProvider && Boolean(hasLinkedPupil) && !c.allowRealPupilData;
 }
 
 /** Provenance stamp for a blocked run — records that no real provider was called. */
@@ -148,20 +157,23 @@ async function prepare(input: { dataUrl?: string; imageUrl?: string; mimeType?: 
 
 /**
  * Braille OCR. In mock mode always uses the deterministic mock. In real mode dispatches by
- * `BRAILLE_OCR_PROVIDER`: openai_vision_draft (non-specialist draft) or external_braille_ocr.
+ * `BRAILLE_OCR_PROVIDER`: abc_braille_web (default), openai_vision_draft
+ * (non-specialist draft), external_braille_ocr, or explicit mock.
  * Output ALWAYS requires specialist verification.
  */
 export async function transcribeBraille(input: BrailleOcrInput): Promise<BrailleOcrResult> {
   const config = getAiConfig();
 
   // Preflight block: pupil-linked + real mode + not approved → never reach a real provider.
-  if (realPupilBlockActive(input.hasLinkedPupil)) return blockedBrailleResult();
+  if (realBraillePupilBlockActive(input.hasLinkedPupil)) return blockedBrailleResult();
 
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
 
   let result: BrailleOcrResult;
-  if (config.mode === "mock") {
+  if (config.brailleOcrProvider === "abc_braille_web") {
+    result = await transcribeBrailleWithAbc(sanitizeBrailleInput(routed));
+  } else if (config.mode === "mock") {
     result = await transcribeBrailleMock(routed);
   } else if (config.brailleOcrProvider === "openai_vision_draft") {
     result = await transcribeBrailleWithOpenAIDraft(sanitizeBrailleInput(routed));

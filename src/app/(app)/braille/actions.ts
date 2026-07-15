@@ -138,7 +138,7 @@ async function executeTranscription(
     newStatus: task.status,
     provider: result.meta.provider,
     model: result.meta.model,
-    confidence: result.confidence,
+    confidence: result.meta.provider === "abc_braille_web" ? null : result.confidence,
     processingMs: result.meta.processingMs,
     aiMode: result.meta.mode,
     promptVersion: result.meta.promptVersion,

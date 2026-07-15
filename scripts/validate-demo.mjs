@@ -111,10 +111,30 @@ const checks = [
       "ai.braille_ocr.run",
     ],
   },
+  // Mock Braille prose must never be mistaken for OCR of the uploaded image.
+  {
+    file: "src/app/(app)/braille/[id]/review-workflow.tsx",
+    mustContain: [
+      "Demo placeholder only.",
+      "This text was not read from the uploaded image.",
+      "Enable live image transcription and run transcription again",
+    ],
+  },
 ];
 
 // Negative checks: server actions must NOT call the old mock-only functions directly.
 const negativeChecks = [
+  {
+    files: [
+      "src/app/(app)/braille/[id]/page.tsx",
+      "src/app/(app)/braille/[id]/review-workflow.tsx",
+      "src/app/(app)/audit/page.tsx",
+      "src/app/(app)/quality/page.tsx",
+      "src/components/ai-meta.tsx",
+      "src/components/task-timeline.tsx",
+    ],
+    mustNotContain: ["Import real result", "ImportDraftEditor", "ABC Braille", "abc_braille_web", "abc-braille-"],
+  },
   {
     files: [
       "src/app/(app)/braille/actions.ts",

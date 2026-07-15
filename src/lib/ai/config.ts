@@ -13,6 +13,9 @@ const DEFAULT_TEXT_MODEL = "gpt-4.1";
 const DEFAULT_MAX_UPLOAD_MB = 10;
 const DEFAULT_ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "application/pdf"];
 const DEFAULT_BRAILLE_OCR_TIMEOUT_MS = 30000;
+const DEFAULT_ABC_BRAILLE_TIMEOUT_MS = 120000;
+const DEFAULT_ABC_BRAILLE_URL = "https://www.abcbraille.com";
+const DEFAULT_ABC_BRAILLE_TABLE = "en-ueb-g2.ctb";
 const DEFAULT_LIBLOUIS_TABLE = "en-ueb-g2.ctb";
 const DEFAULT_LIBLOUIS_TIMEOUT_MS = 5000;
 
@@ -32,12 +35,17 @@ function normaliseProvider(raw: string | undefined): AiProviderName {
 }
 
 function normaliseBrailleProvider(raw: string | undefined): BrailleOcrProviderName {
+  if (!raw) return "abc_braille_web";
   switch (raw) {
     case "openai_vision_draft":
       return "openai_vision_draft";
     case "external_braille_ocr":
       return "external_braille_ocr";
+    case "abc_braille_web":
+      return "abc_braille_web";
     default:
+      // A typo must never cause a real-provider upload. Only an unset value defaults to
+      // ABC Braille; an invalid explicit value keeps the original safe mock fallback.
       return "mock";
   }
 }
@@ -71,7 +79,9 @@ export function getAiConfig(): AiConfig {
     visionModel: readEnv("OPENAI_VISION_MODEL") ?? DEFAULT_VISION_MODEL,
     textModel: readEnv("OPENAI_TEXT_MODEL") ?? DEFAULT_TEXT_MODEL,
     hasOpenAiKey: Boolean(readEnv("OPENAI_API_KEY")),
-    hasBrailleEndpoint: Boolean(readEnv("BRAILLE_OCR_ENDPOINT") ?? inAppBrailleEndpoint()),
+    hasBrailleEndpoint:
+      normaliseBrailleProvider(readEnv("BRAILLE_OCR_PROVIDER")) === "abc_braille_web" ||
+      Boolean(readEnv("BRAILLE_OCR_ENDPOINT") ?? inAppBrailleEndpoint()),
     allowRealPupilData: readEnv("ALLOW_REAL_PUPIL_DATA") === "true",
   };
 }
@@ -107,6 +117,27 @@ export function getBrailleEndpointConfig(): { endpoint?: string; apiKey?: string
     endpoint: readEnv("BRAILLE_OCR_ENDPOINT") ?? inAppBrailleEndpoint(),
     apiKey: readEnv("BRAILLE_OCR_API_KEY"),
     timeoutMs: parsePositiveInt(readEnv("BRAILLE_OCR_TIMEOUT_MS"), DEFAULT_BRAILLE_OCR_TIMEOUT_MS),
+  };
+}
+
+function normaliseAbcBrailleBaseUrl(raw: string | undefined): string {
+  const candidate = raw ?? DEFAULT_ABC_BRAILLE_URL;
+  try {
+    const url = new URL(candidate);
+    const loopback = url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1";
+    if (url.protocol !== "https:" && !(loopback && url.protocol === "http:")) return DEFAULT_ABC_BRAILLE_URL;
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return DEFAULT_ABC_BRAILLE_URL;
+  }
+}
+
+/** Server-only configuration for the ABC Braille web image-to-text workflow. */
+export function getAbcBrailleConfig(): { baseUrl: string; languageTable: string; timeoutMs: number } {
+  return {
+    baseUrl: normaliseAbcBrailleBaseUrl(readEnv("ABC_BRAILLE_BASE_URL")),
+    languageTable: readEnv("ABC_BRAILLE_LANGUAGE_TABLE") ?? DEFAULT_ABC_BRAILLE_TABLE,
+    timeoutMs: parsePositiveInt(readEnv("ABC_BRAILLE_TIMEOUT_MS"), DEFAULT_ABC_BRAILLE_TIMEOUT_MS),
   };
 }
 

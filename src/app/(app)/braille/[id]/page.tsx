@@ -8,6 +8,7 @@ import { can } from "@/lib/rbac";
 import { TaskBadge } from "@/components/ui/badge";
 import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
+import { isPrivateProviderIdentity, redactPrivateBrailleProvenance } from "@/lib/ai/provider-visibility";
 import { ReviewWorkflow } from "./review-workflow";
 import { hydrateBrailleTask } from "@/lib/durable-braille";
 
@@ -18,6 +19,8 @@ export default async function BrailleDetailPage({ params }: { params: { id: stri
 
   const up = getTaskUpload(task.id);
   const timeline = getTaskAudit(task.id);
+  const privateProvenance = isPrivateProviderIdentity(task.transcription?.aiProvider);
+  const taskForDisplay = redactPrivateBrailleProvenance(task);
   const upload = up
     ? { dataUrl: uploadDataUrl(up), fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
     : null;
@@ -40,8 +43,9 @@ export default async function BrailleDetailPage({ params }: { params: { id: stri
       </div>
 
       <ReviewWorkflow
-        task={task}
+        task={taskForDisplay}
         upload={upload}
+        privateProvenance={privateProvenance}
         permissions={{
           canEdit: can(user.role, "transcription.edit"),
           canVerify: can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate }),

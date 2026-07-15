@@ -14,7 +14,8 @@ export type AiProviderName = "mock" | "openai";
 export type BrailleOcrProviderName =
   | "mock"
   | "openai_vision_draft"
-  | "external_braille_ocr";
+  | "external_braille_ocr"
+  | "abc_braille_web";
 
 export type ProcessingStatus =
   | "uploaded"
