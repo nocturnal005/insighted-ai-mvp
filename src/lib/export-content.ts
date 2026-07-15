@@ -43,7 +43,9 @@ export function buildExport(kind: ExportKind, id: string): { doc?: ExportDoc; er
             { heading: "Verified English transcription", body: t.transcription.finalText },
             {
               heading: "Specialist verified by",
-              body: `${userName(t.transcription.specialistVerifiedBy)} - confidence ${Math.round(t.transcription.confidence * 100)}%`,
+              body: t.transcription.aiProvider === "abc_braille_web"
+                ? `${userName(t.transcription.specialistVerifiedBy)} - provider confidence not supplied`
+                : `${userName(t.transcription.specialistVerifiedBy)} - confidence ${Math.round(t.transcription.confidence * 100)}%`,
             },
             { heading: "Specialist transcription notes", body: t.transcription.specialistNotes || "None." },
           ],

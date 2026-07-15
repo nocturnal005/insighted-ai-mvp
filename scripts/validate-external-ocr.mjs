@@ -46,7 +46,9 @@ const VERIFIED_FINAL = `${MOCK_DRAFT} corrected by specialist`;
 const TEACHER_COMMENTS = "Guardrail teacher feedback comments 51ad.";
 
 const DRAFT_WARNING =
-  "This is an AI/OCR draft. It must be checked by a QTVI or Braille-literate specialist before teacher feedback or export.";
+  "This draft transcription must be checked by a QTVI or Braille-literate specialist before teacher feedback or export.";
+const MANUAL_TRANSCRIPTION_WARNING =
+  "OCR did not produce a dependable starting point from this capture.";
 const GATE_HINT = "Teacher feedback &amp; export unlock after specialist verification";
 
 // 106x64 synthetic Braille PNG (generated test asset — not pupil work).
@@ -409,6 +411,7 @@ async function main() {
     check("no fabricated draft on failure", !page.includes(MOCK_DRAFT));
     check("controlled failure flag shown", /failed|unavailable/i.test(page));
     check("failure output still draft-gated", page.includes(DRAFT_WARNING));
+    check("failure prompts retake or specialist transcription", page.includes(MANUAL_TRANSCRIPTION_WARNING));
 
     exitCode = failures.length ? 1 : 0;
   } catch (error) {

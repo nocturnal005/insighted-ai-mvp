@@ -16,19 +16,31 @@ export interface AiMetaProps {
   flagCount?: number | null;
   /** True when the last run fell back (provider unavailable / processing failed). */
   unavailable?: boolean;
+  /** Keep internal provider, model, and prompt identifiers out of staff-facing UI. */
+  redactProviderIdentity?: boolean;
 }
 
 function formatMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 }
 
-export function AiMeta({ mode, provider, model, confidence, promptVersion, processingMs, flagCount, unavailable }: AiMetaProps) {
+export function AiMeta({
+  mode,
+  provider,
+  model,
+  confidence,
+  promptVersion,
+  processingMs,
+  flagCount,
+  unavailable,
+  redactProviderIdentity = false,
+}: AiMetaProps) {
   if (!mode && !provider && !model && confidence == null && processingMs == null) return null;
 
   const badge = unavailable
-    ? { label: "Provider unavailable", cls: "bg-critical-50 text-critical-700", Icon: AlertOctagon }
+    ? { label: redactProviderIdentity ? "Processing unavailable" : "Provider unavailable", cls: "bg-critical-50 text-critical-700", Icon: AlertOctagon }
     : mode === "real"
-      ? { label: "Real provider", cls: "bg-accent-50 text-accent-700", Icon: Bot }
+      ? { label: redactProviderIdentity ? "Live transcription" : "Real provider", cls: "bg-accent-50 text-accent-700", Icon: Bot }
       : { label: "Mock demo", cls: "bg-zinc-100 text-zinc-600", Icon: Bot };
 
   return (
@@ -36,12 +48,12 @@ export function AiMeta({ mode, provider, model, confidence, promptVersion, proce
       <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-medium ${badge.cls}`} title="AI mode">
         <badge.Icon className="h-3.5 w-3.5" /> {badge.label}
       </span>
-      {provider && (
+      {!redactProviderIdentity && provider && (
         <span className="inline-flex items-center gap-1.5" title="Provider">
           <ShieldQuestion className="h-3.5 w-3.5" /> {provider}
         </span>
       )}
-      {model && (
+      {!redactProviderIdentity && model && (
         <span className="inline-flex items-center gap-1.5" title="Model">
           <Cpu className="h-3.5 w-3.5" /> {model}
         </span>
@@ -61,7 +73,7 @@ export function AiMeta({ mode, provider, model, confidence, promptVersion, proce
           <Flag className="h-3.5 w-3.5" /> {flagCount} flag{flagCount === 1 ? "" : "s"}
         </span>
       )}
-      {promptVersion && <span className="text-zinc-400">· {promptVersion}</span>}
+      {!redactProviderIdentity && promptVersion && <span className="text-zinc-400">· {promptVersion}</span>}
     </div>
   );
 }

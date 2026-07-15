@@ -110,7 +110,7 @@ export async function runEvaluation() {
       prediction = r.draftText;
       provider = r.meta.provider;
       model = r.meta.model;
-      confidence = r.confidence;
+      confidence = r.meta.provider === "abc_braille_web" ? null : r.confidence;
       aiMode = r.meta.mode;
       flagSummary = summariseFlags(r.flags);
       promptVersion = r.meta.promptVersion;
@@ -142,6 +142,7 @@ export async function runEvaluation() {
   const config = getAiConfig();
   // De-duplicate the aggregate flag summary for a concise, secret-free audit record.
   const flagSummary = Array.from(new Set(aggregateFlags)).slice(0, 8);
+  const abcBrailleRun = config.brailleOcrProvider === "abc_braille_web";
   recordAudit({
     actorId: user.id,
     actorName: user.fullName,
@@ -149,8 +150,8 @@ export async function runEvaluation() {
     action: "eval.run",
     objectType: "Evaluation",
     objectLabel: `${db.evalSamples.length} sample(s)`,
-    aiMode: config.mode,
-    provider: config.mode === "mock" ? "mock" : config.brailleOcrProvider,
+    aiMode: abcBrailleRun ? "real" : config.mode,
+    provider: abcBrailleRun ? "abc_braille_web" : config.mode === "mock" ? "mock" : config.brailleOcrProvider,
     promptVersion,
     flagSummary: flagSummary.length ? flagSummary : null,
   });

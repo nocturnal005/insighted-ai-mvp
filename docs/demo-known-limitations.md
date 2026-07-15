@@ -11,7 +11,7 @@ An honest, client-safe summary of what this build does **not** yet do, so a demo
 ## AI / OCR
 
 - **OpenAI Braille output is a draft only.** In real mode the OpenAI vision Braille output is explicitly a *non-specialist draft* and **always requires specialist verification** (by a QTVI, Admin, or Braille-literate staff member) before it is used for teacher feedback or export. It is **not** a definitive Braille OCR engine.
-- **True specialist Braille OCR is not bundled.** A dedicated dot/cell-detection Braille OCR engine plugs in behind the `external_braille_ocr` adapter but is not included in this build.
+- **ABC Braille integration is provisional.** Run transcription can use ABC Braille's public image-to-text web workflow, but ABC does not publish a supported JSON API or numeric confidence score. The integration may need maintenance if its HTML workflow changes, and production use requires ABC's permission plus school privacy/data-processing approval.
 - **Liblouis back-translation is optional/stubbed.** It is disabled unless explicitly configured (`LIBLOUIS_ENABLED=true` with a CLI). It runs *after* cell detection to convert detected Braille into print text — it does not read a photograph on its own — and is never required for install/typecheck/build.
 - **PDF upload is accepted but not OCR-rasterised.** PDFs are stored, but full PDF page rasterisation for OCR is pending; a PDF returns a high-severity `pdf_processing_pending` flag. **For an OCR demo, upload a PNG/JPG page image.**
 - **Mock mode is illustrative.** Mock drafts and Quality numbers are deterministic and offline — they demonstrate the workflow, not real OCR accuracy. Real accuracy requires `AI_MODE=real` with a configured provider.
