@@ -88,9 +88,9 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
           )}
           {approved || !permissions.canEdit ? (
             <dl className="grid gap-2 text-sm">
-              <div className="flex gap-2"><dt className="w-32 shrink-0 text-zinc-400">Context</dt><dd className="text-zinc-700">{CONTEXTS.find((c) => c.value === context)?.label ?? context}</dd></div>
-              <div className="flex gap-2"><dt className="w-32 shrink-0 text-zinc-400">Question prompt</dt><dd className="text-zinc-700">{questionPrompt || "—"}</dd></div>
-              <div className="flex gap-2"><dt className="w-32 shrink-0 text-zinc-400">Assessed skill</dt><dd className="text-zinc-700">{assessedSkill || "—"}</dd></div>
+              <div className="flex gap-2"><dt className="w-24 shrink-0 text-zinc-400 sm:w-32">Context</dt><dd className="min-w-0 break-words text-zinc-700">{CONTEXTS.find((c) => c.value === context)?.label ?? context}</dd></div>
+              <div className="flex gap-2"><dt className="w-24 shrink-0 text-zinc-400 sm:w-32">Question prompt</dt><dd className="min-w-0 break-words text-zinc-700">{questionPrompt || "—"}</dd></div>
+              <div className="flex gap-2"><dt className="w-24 shrink-0 text-zinc-400 sm:w-32">Assessed skill</dt><dd className="min-w-0 break-words text-zinc-700">{assessedSkill || "—"}</dd></div>
             </dl>
           ) : (
             <div className="space-y-3">
@@ -207,7 +207,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
               {rejecting && (
                 <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
                   <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for rejection" className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <button onClick={() => setRejecting(false)} className="h-8 rounded-lg border border-zinc-200 px-3 text-[13px] text-zinc-700 hover:bg-zinc-50">Cancel</button>
                     <button onClick={() => run("reject", () => rejectVisual(task.id, reason))} disabled={pending} className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-critical-600 px-3 text-[13px] font-medium text-white hover:bg-critical-700 disabled:opacity-50">{action === "reject" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Confirm</button>
                   </div>

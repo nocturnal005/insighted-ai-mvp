@@ -16,6 +16,15 @@
     @apply bg-zinc-50 text-zinc-900;
   }
 
+  /* Give touch users comfortable targets without changing desktop density. */
+  @media (pointer: coarse) {
+    button,
+    [role="button"] {
+      min-height: 44px;
+      touch-action: manipulation;
+    }
+  }
+
   /* WCAG 2.2 AA — clear, high-contrast focus ring everywhere. */
   :focus-visible {
     @apply outline-none ring-2 ring-accent-600 ring-offset-2 ring-offset-white;

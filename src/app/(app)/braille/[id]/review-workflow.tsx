@@ -113,7 +113,7 @@ export function ReviewWorkflow({
           <CardBody className="space-y-3">
             <label htmlFor="reason" className="text-sm font-medium text-zinc-700">Reason for rejection</label>
             <textarea id="reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" placeholder="e.g. Image too blurry to transcribe — please re-upload." />
-            <div className="flex justify-end gap-2.5">
+            <div className="flex flex-wrap justify-end gap-2.5">
               <button onClick={() => setRejecting(false)} className="h-9 rounded-lg border border-zinc-200 px-3.5 text-[13px] text-zinc-700 hover:bg-zinc-50">Cancel</button>
               <button onClick={() => run("reject", () => rejectBrailleTask(task.id, reason))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-critical-600 px-3.5 text-[13px] font-medium text-white hover:bg-critical-700 disabled:opacity-50">
                 {action === "reject" && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Confirm rejection
