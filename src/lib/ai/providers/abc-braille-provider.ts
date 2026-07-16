@@ -79,11 +79,22 @@ async function readHtml(response: Response): Promise<string> {
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
     throw new Error("ABC Braille response was too large");
   }
-  const html = await response.text();
-  if (Buffer.byteLength(html, "utf8") > MAX_RESPONSE_BYTES) {
-    throw new Error("ABC Braille response was too large");
+
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new Error("ABC Braille response was too large");
+    }
+    chunks.push(Buffer.from(value));
   }
-  return html;
+  return Buffer.concat(chunks, total).toString("utf8");
 }
 
 function decodeDataUrl(dataUrl: string): { bytes: Buffer; mimeType: string } {

@@ -15,6 +15,7 @@ export function ExportMenu({ id, kind, label = "Export" }: { id: string; kind: E
       </a>
       <Link
         href={`/print/${id}?kind=${kind}`}
+        prefetch={false}
         className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-zinc-800"
       >
         <Printer className="h-3.5 w-3.5" /> Print / Save as PDF

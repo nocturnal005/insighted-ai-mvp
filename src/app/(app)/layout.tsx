@@ -37,7 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-zinc-200/80 bg-white/80 px-6 backdrop-blur">
+        <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-zinc-200/80 bg-white px-4 sm:px-6">
           <MobileNav role={user.role} />
           <Link
             href="/login"
@@ -62,8 +62,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main id="main" className="flex-1 px-6 py-8">
-          <div className="mx-auto max-w-5xl animate-fade-in">{children}</div>
+        <main id="main" className="flex-1 px-4 py-8 sm:px-6">
+          <div className="mx-auto max-w-5xl">{children}</div>
         </main>
       </div>
     </div>

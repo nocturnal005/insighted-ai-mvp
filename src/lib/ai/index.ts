@@ -164,6 +164,11 @@ async function prepare(input: { dataUrl?: string; imageUrl?: string; mimeType?: 
 export async function transcribeBraille(input: BrailleOcrInput): Promise<BrailleOcrResult> {
   const config = getAiConfig();
 
+  // Mock mode is deliberately offline and deterministic. Return before image
+  // preprocessing so a demo does not decode/re-encode a multi-megabyte upload or
+  // accidentally call an external OCR workflow configured for production.
+  if (config.mode === "mock") return transcribeBrailleMock(input);
+
   // Preflight block: pupil-linked + real mode + not approved → never reach a real provider.
   if (realBraillePupilBlockActive(input.hasLinkedPupil)) return blockedBrailleResult();
 
@@ -173,8 +178,6 @@ export async function transcribeBraille(input: BrailleOcrInput): Promise<Braille
   let result: BrailleOcrResult;
   if (config.brailleOcrProvider === "abc_braille_web") {
     result = await transcribeBrailleWithAbc(sanitizeBrailleInput(routed));
-  } else if (config.mode === "mock") {
-    result = await transcribeBrailleMock(routed);
   } else if (config.brailleOcrProvider === "openai_vision_draft") {
     result = await transcribeBrailleWithOpenAIDraft(sanitizeBrailleInput(routed));
   } else if (config.brailleOcrProvider === "external_braille_ocr") {
@@ -204,13 +207,13 @@ function shouldUseRealOpenAi(): boolean {
  * never a silent downgrade to mock). Mock mode stays fully offline.
  */
 export async function describeVisual(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
+  // Mock output uses task metadata only, so pixel preprocessing is wasted work.
+  if (!shouldUseRealOpenAi()) return describeVisualMock(input);
   if (realPupilBlockActive(input.hasLinkedPupil)) return blockedVisualResult();
 
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
-  const result = shouldUseRealOpenAi()
-    ? await describeVisualWithOpenAI(sanitizeVisualInput(routed))
-    : await describeVisualMock(routed);
+  const result = await describeVisualWithOpenAI(sanitizeVisualInput(routed));
   const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
   return {
     ...result,
@@ -221,13 +224,12 @@ export async function describeVisual(input: VisualDescriptionInput): Promise<Vis
 
 /** STEM structured description. Real OpenAI in real mode (self-handling missing config), else mock. */
 export async function describeStemVisual(input: StemDescriptionInput): Promise<StemDescriptionResult> {
+  if (!shouldUseRealOpenAi()) return describeStemMock(input);
   if (realPupilBlockActive(input.hasLinkedPupil)) return blockedStemResult();
 
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
-  const result = shouldUseRealOpenAi()
-    ? await describeStemWithOpenAI(sanitizeVisualInput(routed))
-    : await describeStemMock(routed);
+  const result = await describeStemWithOpenAI(sanitizeVisualInput(routed));
   const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
   return {
     ...result,

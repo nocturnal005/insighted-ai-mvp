@@ -25,7 +25,7 @@ export default function AdminPage() {
         <CardBody className="p-0">
           <ul className="divide-y divide-zinc-100">
             {users.map((u) => (
-              <li key={u.id} className="flex items-center gap-3.5 px-5 py-3.5">
+              <li key={u.id} className="flex flex-col items-stretch gap-3.5 px-5 py-3.5 md:flex-row md:items-center">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-100 text-[11px] font-semibold text-accent-700">{ROLE_INITIALS[u.role]}</span>
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 text-sm font-medium text-zinc-900">
@@ -41,7 +41,7 @@ export default function AdminPage() {
                   </p>
                   <p className="text-xs text-zinc-400">{u.email}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <form action={setBrailleLiterate}>
                     <input type="hidden" name="userId" value={u.id} />
                     <input type="hidden" name="brailleLiterate" value={u.brailleLiterate ? "false" : "true"} />
@@ -56,7 +56,7 @@ export default function AdminPage() {
                       {u.brailleLiterate ? "Braille-literate ✓" : "Mark Braille-literate"}
                     </button>
                   </form>
-                  <form action={setUserRole} className="flex items-center gap-2">
+                  <form action={setUserRole} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="userId" value={u.id} />
                     <select name="role" defaultValue={u.role} className="h-9 rounded-lg border border-zinc-200 px-2 text-[13px]">
                       {ALL_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
