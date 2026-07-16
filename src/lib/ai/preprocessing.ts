@@ -2,7 +2,8 @@
  * Image preprocessing for AI/OCR.
  *
  * Uses `sharp` to normalise photographed pupil work before it reaches a provider:
- * auto-rotate (EXIF), cap very large images, and re-encode to a compact PNG. Everything
+ * auto-rotate (EXIF) and cap very large images. Images that already fit are reused;
+ * transformed JPEGs remain JPEGs so photographs do not balloon into lossless PNGs.
  * is defensive — any failure returns the ORIGINAL data URL plus a high-severity warning
  * rather than throwing, so a bad image can never crash a server action. PDFs are stored
  * and flagged as pending because raster OCR of PDFs is not wired in this build.
@@ -124,15 +125,10 @@ export async function preprocessImage(input: PreprocessInput): Promise<Preproces
   }
 
   try {
-    const pipeline = sharpModule(parsed.buffer, { failOn: "none" }).rotate(); // EXIF auto-rotate
-    const meta = await pipeline.metadata();
-
-    if (meta.width && meta.width > MAX_WIDTH) {
-      pipeline.resize({ width: MAX_WIDTH, withoutEnlargement: true });
-    }
-
-    const out = await pipeline.png({ compressionLevel: 9 }).toBuffer();
-    const processedDataUrl = `data:image/png;base64,${out.toString("base64")}`;
+    const image = sharpModule(parsed.buffer, { failOn: "none" });
+    const meta = await image.metadata();
+    const shouldResize = Boolean(meta.width && meta.width > MAX_WIDTH);
+    const shouldRotate = typeof meta.orientation === "number" && meta.orientation !== 1;
 
     // Cheap low-quality heuristic: tiny source images are hard to OCR.
     if (meta.width && meta.height && meta.width * meta.height < 300 * 300) {
@@ -146,8 +142,30 @@ export async function preprocessImage(input: PreprocessInput): Promise<Preproces
       );
     }
 
+    // Avoid a full decode/encode when there is nothing to normalise. This is the
+    // common case for screenshots and already-resized camera images.
+    if (!shouldResize && !shouldRotate && ["image/jpeg", "image/jpg", "image/png"].includes(parsed.mime)) {
+      return {
+        processedDataUrl: input.dataUrl,
+        width: meta.width,
+        height: meta.height,
+        warnings,
+      };
+    }
+
+    let pipeline = image.rotate(); // EXIF auto-rotate
+    if (shouldResize) pipeline = pipeline.resize({ width: MAX_WIDTH, withoutEnlargement: true });
+
+    // Photographs become much larger when converted to PNG. Keep JPEG input as a
+    // high-quality JPEG; retain lossless PNG for diagrams and screenshots.
+    const outputIsPng = parsed.mime === "image/png";
+    const out = outputIsPng
+      ? await pipeline.png({ compressionLevel: 6 }).toBuffer()
+      : await pipeline.jpeg({ quality: 92, mozjpeg: false }).toBuffer();
+    const outputMime = outputIsPng ? "image/png" : "image/jpeg";
+
     return {
-      processedDataUrl,
+      processedDataUrl: `data:${outputMime};base64,${out.toString("base64")}`,
       width: meta.width,
       height: meta.height,
       warnings,

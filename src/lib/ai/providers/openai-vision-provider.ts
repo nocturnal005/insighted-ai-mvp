@@ -21,7 +21,7 @@ import type {
   VisualDescriptionInput,
   VisualDescriptionResult,
 } from "../types";
-import { getAiConfig, getOpenAiKey } from "../config";
+import { getAiConfig, getOpenAiKey, getOpenAiRequestConfig } from "../config";
 import { startRun, finishMeta, type RunTimer } from "../meta";
 import {
   buildBrailleDraftPrompt,
@@ -115,10 +115,27 @@ function mapRawFlags(raw: z.infer<typeof rawFlagSchema>[] | undefined, fallbackC
 
 // ── OpenAI plumbing ─────────────────────────────────────────────────────────
 
+let cachedClient: OpenAI | null = null;
+let cachedApiKey: string | undefined;
+let cachedTimeoutMs = 0;
+let cachedMaxRetries = 0;
+
 function getClient(): OpenAI | null {
   const apiKey = getOpenAiKey();
   if (!apiKey) return null;
-  return new OpenAI({ apiKey });
+  const { timeoutMs, maxRetries } = getOpenAiRequestConfig();
+  if (
+    !cachedClient ||
+    cachedApiKey !== apiKey ||
+    cachedTimeoutMs !== timeoutMs ||
+    cachedMaxRetries !== maxRetries
+  ) {
+    cachedClient = new OpenAI({ apiKey, timeout: timeoutMs, maxRetries });
+    cachedApiKey = apiKey;
+    cachedTimeoutMs = timeoutMs;
+    cachedMaxRetries = maxRetries;
+  }
+  return cachedClient;
 }
 
 function imageContent(input: { dataUrl?: string; imageUrl?: string }): { type: "image_url"; image_url: { url: string } } | null {
@@ -133,6 +150,7 @@ async function callVisionJson(system: string, image: { type: "image_url"; image_
   const completion = await client.chat.completions.create({
     model,
     temperature: 0,
+    max_completion_tokens: 6000,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: "You output strict JSON only. No prose, no markdown fences." },

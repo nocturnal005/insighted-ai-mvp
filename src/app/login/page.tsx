@@ -81,7 +81,7 @@ function SiteHeader() {
         <div className="flex items-center gap-3">
           <div className="hidden items-center gap-2 rounded-full border border-white/20 bg-black/20 px-3 py-1 sm:flex">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#9af6b5] opacity-75" />
+              <span className="absolute inline-flex h-full w-full rounded-full bg-[#9af6b5] opacity-40" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#9af6b5]" />
             </span>
             <span className="text-[10px] font-semibold uppercase tracking-widest text-white">System Status: Online</span>
@@ -235,7 +235,7 @@ export default function LoginPage() {
       <SiteHeader />
       <main id="main" className="w-full flex-grow">
         <Hero />
-        <section id="profiles" className="bg-[#eef4ff] px-6 py-16">
+        <section id="profiles" className="defer-render bg-[#eef4ff] px-6 py-16">
           <div className="mx-auto max-w-6xl">
             <div className="mb-12 text-center">
               <h2 className="font-display mb-2 text-3xl font-bold text-[#002147]">Select Workspace Profile</h2>

@@ -18,7 +18,8 @@ export default function DpiaPage() {
     <div className="max-w-3xl">
       <PageHeader title="Data Protection Impact Assessment" description="Draft — placeholder structure to be completed and signed off before launch." />
       <Card className="overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto" aria-label="DPIA assessment table">
+        <table className="min-w-[640px] w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-100 text-left">
               <th className="px-5 py-3 eyebrow font-semibold">Area</th>
@@ -38,6 +39,7 @@ export default function DpiaPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );

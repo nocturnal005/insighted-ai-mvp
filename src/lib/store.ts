@@ -356,6 +356,26 @@ export function getUploadById(uploadId: string): Upload | undefined {
   return db.uploads.find((u) => u.id === uploadId);
 }
 
+/** Read upload bytes without base64-encoding them for an RSC/client payload. */
+export function uploadBytes(upload: Upload): Buffer | null {
+  if (upload.dataUrl) {
+    const match = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(upload.dataUrl);
+    if (!match) return null;
+    try {
+      return match[2]
+        ? Buffer.from(match[3], "base64")
+        : Buffer.from(decodeURIComponent(match[3]), "utf8");
+    } catch {
+      return null;
+    }
+  }
+  try {
+    return upload.storagePath ? readFileSync(upload.storagePath) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Remove a single tracked upload (file + metadata). Used when deleting an eval sample. */
 export function deleteUploadById(uploadId: string): void {
   const upload = db.uploads.find((u) => u.id === uploadId);

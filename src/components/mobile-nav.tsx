@@ -26,11 +26,16 @@ export function MobileNav({ role }: { role: UserRole }) {
   // Close on Escape and lock body scroll while open.
   useEffect(() => {
     if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [open]);
 
   return (
@@ -49,7 +54,7 @@ export function MobileNav({ role }: { role: UserRole }) {
       {open && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Navigation">
           <div
-            className="absolute inset-0 bg-zinc-900/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-zinc-900/40"
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
@@ -71,7 +76,7 @@ export function MobileNav({ role }: { role: UserRole }) {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <nav aria-label="Primary (mobile)" className="flex flex-col gap-0.5 overflow-y-auto px-3 py-2">
+            <nav aria-label="Primary (mobile)" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
               {items.map((item) => {
                 const active = pathname === item.href || pathname.startsWith(item.href + "/");
                 const Icon = item.icon;
@@ -79,6 +84,7 @@ export function MobileNav({ role }: { role: UserRole }) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={false}
                     aria-current={active ? "page" : undefined}
                     onClick={() => setOpen(false)}
                     className={cn(

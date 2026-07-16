@@ -11,6 +11,8 @@ import type { AiMode, AiProviderName, BrailleOcrProviderName } from "./types";
 const DEFAULT_VISION_MODEL = "gpt-4.1";
 const DEFAULT_TEXT_MODEL = "gpt-4.1";
 const DEFAULT_MAX_UPLOAD_MB = 10;
+const DEFAULT_OPENAI_TIMEOUT_MS = 60000;
+const DEFAULT_OPENAI_MAX_RETRIES = 1;
 const DEFAULT_ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "application/pdf"];
 const DEFAULT_BRAILLE_OCR_TIMEOUT_MS = 30000;
 const DEFAULT_ABC_BRAILLE_TIMEOUT_MS = 120000;
@@ -55,6 +57,11 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
 
+function parseNonNegativeInt(raw: string | undefined, fallback: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+}
+
 export interface AiConfig {
   mode: AiMode;
   provider: AiProviderName;
@@ -95,6 +102,14 @@ export function isRealAiEnabled(): boolean {
 /** Server-only secret access. Never expose the return value to the client. */
 export function getOpenAiKey(): string | undefined {
   return readEnv("OPENAI_API_KEY");
+}
+
+/** Bound provider latency so an interactive action cannot inherit SDK-scale waits. */
+export function getOpenAiRequestConfig(): { timeoutMs: number; maxRetries: number } {
+  return {
+    timeoutMs: parsePositiveInt(readEnv("OPENAI_TIMEOUT_MS"), DEFAULT_OPENAI_TIMEOUT_MS),
+    maxRetries: parseNonNegativeInt(readEnv("OPENAI_MAX_RETRIES"), DEFAULT_OPENAI_MAX_RETRIES),
+  };
 }
 
 /**

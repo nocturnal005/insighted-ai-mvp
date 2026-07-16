@@ -151,7 +151,7 @@ async function executeTranscription(
 
 export async function runTranscription(taskId: string) {
   const user = requireUser();
-  const task = await hydrateBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId, { includeUploadData: true });
   if (!task) throw new Error("Task not found");
   await executeTranscription(user, task);
 }
@@ -163,7 +163,7 @@ export async function runTranscription(taskId: string) {
  */
 export async function rerunBrailleTranscription(taskId: string) {
   const user = requireUser();
-  const task = await hydrateBrailleTask(taskId);
+  const task = await hydrateBrailleTask(taskId, { includeUploadData: true });
   if (!task) throw new Error("Task not found");
   if (task.status === "rejected" || task.status === "archived") throw new Error("Task is closed");
 

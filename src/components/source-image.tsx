@@ -4,8 +4,9 @@ import { formatRelative } from "@/lib/utils";
 
 /** Metadata about a tracked Upload record, passed from the server. */
 export interface SourceUpload {
-  dataUrl: string;
+  src: string;
   fileName: string;
+  fileType: string;
   uploaderName: string;
   createdAt: string;
 }
@@ -25,8 +26,30 @@ export function SourceImage({ upload, label = "Source image" }: { upload: Source
         </span>
       </CardHeader>
       <CardBody>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={upload.dataUrl} alt={`Uploaded file: ${upload.fileName}`} className="max-h-72 rounded-lg border border-zinc-200" />
+        {upload.fileType.startsWith("image/") ? (
+          <div className="aspect-[4/3] w-full overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
+            {/* The protected, same-origin response is already bounded by upload policy. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={upload.src}
+              alt={`Uploaded file: ${upload.fileName}`}
+              width={1200}
+              height={900}
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-contain"
+            />
+          </div>
+        ) : (
+          <a
+            href={upload.src}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-lg border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Open uploaded document
+          </a>
+        )}
       </CardBody>
     </Card>
   );
