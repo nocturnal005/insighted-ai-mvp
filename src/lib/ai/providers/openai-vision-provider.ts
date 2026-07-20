@@ -8,10 +8,14 @@
  * output is explicitly draft-only and always `requiresSpecialistReview: true`.
  */
 import OpenAI from "openai";
+import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 import type {
+  BrailleDiscrepancyType,
   BrailleOcrInput,
   BrailleOcrResult,
+  BrailleReviewDiscrepancy,
+  BrailleReviewStatus,
   DetectedVisualType,
   StemDescriptionInput,
   StemDescriptionResult,
@@ -25,6 +29,7 @@ import { getAiConfig, getOpenAiKey, getOpenAiRequestConfig } from "../config";
 import { startRun, finishMeta, type RunTimer } from "../meta";
 import {
   buildBrailleDraftPrompt,
+  buildBrailleReviewPrompt,
   buildStemPrompt,
   buildVisualPrompt,
   PROMPT_VERSIONS,
@@ -36,7 +41,7 @@ import {
   providerUnavailableFlag,
   requiresSpecialistReviewFlag,
 } from "../uncertainty";
-import { assessmentContextFlags, safeErrorLabel, truncateText } from "../safety";
+import { assessmentContextFlags, safeErrorLabel, sanitizeProviderText, truncateText } from "../safety";
 
 const PROVIDER = "openai";
 /** Never store/display more than this many provider flags, however many are returned. */
@@ -45,7 +50,8 @@ const MAX_FLAGS = 20;
 const KNOWN_CATEGORIES: UncertaintyCategory[] = [
   "low_image_quality", "low_ocr_confidence", "unclear_braille_cell", "possible_contraction_issue",
   "possible_number_sign_issue", "possible_capitalisation_issue", "line_order_uncertainty",
-  "word_spacing_uncertainty", "subject_specific_term", "answer_leak_risk", "trend_revealed",
+  "word_spacing_uncertainty", "subject_specific_term", "engine_disagreement",
+  "secondary_review_unavailable", "answer_leak_risk", "trend_revealed",
   "comparison_revealed", "answer_value_revealed", "label_reveals_answer",
   "visual_emphasis_reveals_answer", "relationship_interpreted", "cause_effect_implied",
   "unnecessary_clue", "requires_specialist_review", "provider_unavailable", "processing_failed",
@@ -95,6 +101,32 @@ const brailleSchema = z.object({
   confidence: z.number().optional(),
   flags: z.array(rawFlagSchema).optional(),
 });
+
+const brailleDiscrepancyTypes = [
+  "character", "word", "contraction", "number_sign", "capitalisation", "punctuation",
+  "spacing", "line_order", "image_quality", "other",
+] as const satisfies readonly BrailleDiscrepancyType[];
+
+const brailleReviewSchema = z
+  .object({
+    summary: z.string(),
+    discrepancies: z
+      .array(
+        z
+          .object({
+            lineNumber: z.number().int().min(1).nullable(),
+            sourceText: z.string(),
+            suggestedText: z.string().nullable(),
+            issueType: z.enum(brailleDiscrepancyTypes),
+            reason: z.string(),
+            severity: z.enum(["low", "medium", "high"]),
+            confidence: z.number().min(0).max(1),
+          })
+          .strict(),
+      )
+      .max(MAX_FLAGS),
+  })
+  .strict();
 
 const VISUAL_TYPES: DetectedVisualType[] = [
   "line_graph", "bar_chart", "table", "labelled_diagram", "science_diagram",
@@ -162,6 +194,110 @@ async function callVisionJson(system: string, image: { type: "image_url"; image_
 }
 
 // ── Public provider functions ───────────────────────────────────────────────
+
+export interface OpenAiBrailleReviewResult {
+  status: BrailleReviewStatus;
+  summary: string;
+  discrepancies: BrailleReviewDiscrepancy[];
+  model: string | null;
+  processingMs: number;
+  requestId: string | null;
+}
+
+/**
+ * Review an ABC Braille draft against the source image and optional Liblouis result.
+ * This endpoint deliberately returns discrepancies only: it is not allowed to replace
+ * the primary draft, and callers must keep every suggestion specialist-controlled.
+ */
+export async function reviewBrailleWithOpenAI(
+  input: BrailleOcrInput & {
+    primaryDraftText: string;
+    rawBraille?: string | null;
+    liblouisText?: string | null;
+  },
+): Promise<OpenAiBrailleReviewResult> {
+  const started = Date.now();
+  const model = getAiConfig().visionModel;
+  const imageUrls = (
+    input.reviewImageUrls?.length
+      ? input.reviewImageUrls
+      : [input.dataUrl || input.imageUrl].filter((value): value is string => Boolean(value))
+  ).slice(0, 5);
+
+  const fallback = (status: BrailleReviewStatus, summary: string): OpenAiBrailleReviewResult => ({
+    status,
+    summary,
+    discrepancies: [],
+    model: getOpenAiKey() ? model : null,
+    processingMs: Date.now() - started,
+    requestId: null,
+  });
+
+  if (!getOpenAiKey()) {
+    return fallback("unavailable", "Secondary AI review is not configured.");
+  }
+  if (imageUrls.length === 0) {
+    return fallback("skipped", "No image was available for secondary review.");
+  }
+  if (!input.primaryDraftText.trim()) {
+    return fallback("skipped", "The primary Braille engine produced no draft to review.");
+  }
+
+  const client = getClient();
+  if (!client) return fallback("unavailable", "Secondary AI review is not configured.");
+
+  const prompt = buildBrailleReviewPrompt({
+    primaryDraftText: sanitizeProviderText(input.primaryDraftText, 12_000) ?? "",
+    rawBraille: sanitizeProviderText(input.rawBraille, 12_000),
+    liblouisText: sanitizeProviderText(input.liblouisText, 12_000),
+    subject: input.subject,
+    yearGroup: input.yearGroup,
+    reviewImageCount: imageUrls.length,
+  });
+  const imageParts = imageUrls.map((url) => ({
+    type: "image_url" as const,
+    image_url: { url, detail: "high" as const },
+  }));
+
+  try {
+    const completion = await client.chat.completions.parse({
+      model,
+      temperature: 0,
+      max_completion_tokens: 6000,
+      response_format: zodResponseFormat(brailleReviewSchema, "braille_discrepancy_review"),
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a cautious Braille transcription reviewer. Report discrepancies only. " +
+            "Never rewrite or replace the primary transcription.",
+        },
+        { role: "user", content: [{ type: "text", text: prompt }, ...imageParts] },
+      ],
+    });
+    const parsed = completion.choices[0]?.message?.parsed;
+    if (!parsed) return fallback("failed", "Secondary AI review returned no structured result.");
+
+    return {
+      status: "completed",
+      summary: truncateText(parsed.summary || "Secondary review completed."),
+      discrepancies: parsed.discrepancies.slice(0, MAX_FLAGS).map((item) => ({
+        lineNumber: item.lineNumber,
+        sourceText: truncateText(item.sourceText),
+        suggestedText: item.suggestedText ? truncateText(item.suggestedText) : null,
+        issueType: item.issueType,
+        reason: truncateText(item.reason),
+        severity: item.severity,
+        confidence: clampConfidence(item.confidence),
+      })),
+      model,
+      processingMs: Date.now() - started,
+      requestId: completion._request_id ?? null,
+    };
+  } catch (error) {
+    return fallback("failed", `Secondary AI review failed (${safeErrorLabel(error)}).`);
+  }
+}
 
 export async function describeVisualWithOpenAI(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
   const timer = startRun();

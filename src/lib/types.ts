@@ -63,12 +63,50 @@ export interface StoredAiFlag {
   severity: "low" | "medium" | "high";
 }
 
+export type BrailleReviewStatus = "completed" | "skipped" | "unavailable" | "failed";
+
+export type BrailleDiscrepancyType =
+  | "character"
+  | "word"
+  | "contraction"
+  | "number_sign"
+  | "capitalisation"
+  | "punctuation"
+  | "spacing"
+  | "line_order"
+  | "image_quality"
+  | "other";
+
+export interface BrailleReviewDiscrepancy {
+  lineNumber: number | null;
+  sourceText: string;
+  suggestedText: string | null;
+  issueType: BrailleDiscrepancyType;
+  reason: string;
+  severity: "low" | "medium" | "high";
+  confidence: number;
+}
+
+export interface BrailleHybridReview {
+  status: BrailleReviewStatus;
+  summary: string;
+  discrepancies: BrailleReviewDiscrepancy[];
+  rawBraille: string | null;
+  backTranslationText: string | null;
+  backTranslationAvailable: boolean;
+  primaryBackTranslationAgreement: number | null;
+  reviewImageCount: number;
+  model: string | null;
+  processingMs: number;
+}
+
 export interface Transcription {
   draftText: string;
   editedText: string;
   finalText: string | null;
   status: TranscriptionStatus;
   confidence: number;
+  confidenceBasis?: "provider" | "consensus" | "not_supplied";
   lowConfidenceRegions: LowConfidenceRegion[];
   engine: string;
   specialistVerifiedBy: string | null;
@@ -89,6 +127,9 @@ export interface Transcription {
   aiFlags?: StoredAiFlag[] | null;
   // Opaque request id returned by an external OCR provider (only if it supplies one).
   aiRequestId?: string | null;
+  // Evidence retained from the hybrid pipeline; suggestions are never auto-applied.
+  rawBraille?: string | null;
+  review?: BrailleHybridReview | null;
 }
 
 export interface FeedbackFindings {
@@ -267,6 +308,8 @@ export interface EvalSample {
   provider?: string | null;
   model?: string | null;
   confidence?: number | null;
+  reviewDiscrepancyCount?: number | null;
+  primaryLiblouisAgreement?: number | null;
   aiMode?: "mock" | "real" | null;
   flagSummary?: string[] | null;
   aiFlags?: StoredAiFlag[] | null;

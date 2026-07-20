@@ -19,6 +19,12 @@ const APP_PORT = 3994;
 const ABC_PORT = 8992;
 const BASE = `http://127.0.0.1:${APP_PORT}`;
 const ABC_BASE = `http://127.0.0.1:${ABC_PORT}`;
+const CONTRACT_PROVIDER =
+  process.env.BRAILLE_CONTRACT_PROVIDER === "abc_openai_review"
+    ? "abc_openai_review"
+    : "abc_braille_web";
+const CONTRACT_LIBLOUIS_ENABLED = process.env.LIBLOUIS_CONTRACT_ENABLED === "true";
+const LIBLOUIS_RUNTIME = path.join(ROOT, ".tools", "liblouis", "3.38.0");
 const EXACT_DRAFT = 'Alpha & beta\nLine two — exactly\nQuotes "stay" word for word.';
 const SYNTHETIC_PNG_B64 =
   "iVBORw0KGgoAAAANSUhEUgAAAaoAAACACAAAAAB/pHLOAAAB/0lEQVR4nO3asW6DMBRA0bjq//8yHaouTQbcuIQbzlk6gNBDVzjFYmw3Gj5ePQB7SZUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVcbn5PnjdtvOd3S/++scM/OC+cfUBcb3n+1cR/e7v84xMy+Z3wKYMZVq/Pp7jqP73V/nmJnXzO+pypDqPVP9/Cxupzq63/11jpl5zfyeqoy5f9a9V2Xeq3ghC2CGVJfYA5zdH1u1yzcm1/1VM8/e0d/O/Ic9wNn9sVW7fGP3mWtnnr2jZ2Z+yAL4/nuAs/tjq3b5xu4z1848e0fPzPyYpypDqvffA5zdH1u1y7ftPnPtzLN39MzMj3mqLrEH6L1qnPe9iheyAGZI9bZ7gM+42neAix33W3W17wCXswBmHJbqat8BruepypAq47BUV/sOcD1PVcaRG0tneIMZ3qv4dxbADKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKluFV8ot6Xzb1ofUQAAAABJRU5ErkJggg==";
@@ -78,10 +84,24 @@ function startApp() {
     cwd: ROOT,
     env: {
       ...process.env,
-      AI_MODE: "mock",
-      BRAILLE_OCR_PROVIDER: "abc_braille_web",
+      // ABC is a real network provider even though this contract points it at a local
+      // facsimile. Keep real dispatch enabled; the facsimile makes the test offline.
+      AI_MODE: "real",
+      BRAILLE_OCR_PROVIDER: CONTRACT_PROVIDER,
       ABC_BRAILLE_BASE_URL: ABC_BASE,
       ABC_BRAILLE_TIMEOUT_MS: "10000",
+      // Hybrid contract runs must remain offline and spend no API credit.
+      OPENAI_API_KEY: "",
+      LIBLOUIS_ENABLED: CONTRACT_LIBLOUIS_ENABLED ? "true" : "false",
+      LIBLOUIS_COMMAND: CONTRACT_LIBLOUIS_ENABLED
+        ? path.join(LIBLOUIS_RUNTIME, "bin", "lou_translate.exe")
+        : "",
+      LIBLOUIS_TABLE: CONTRACT_LIBLOUIS_ENABLED
+        ? path.join(LIBLOUIS_RUNTIME, "share", "liblouis", "tables", "en-ueb-g2.ctb")
+        : "en-ueb-g2.ctb",
+      LIBLOUIS_DISPLAY_TABLE: CONTRACT_LIBLOUIS_ENABLED
+        ? path.join(LIBLOUIS_RUNTIME, "share", "liblouis", "tables", "unicode.dis")
+        : "unicode.dis",
       DEMO_MODE: "true",
       ALLOW_REAL_PUPIL_DATA: "",
       INSIGHTED_DATA_DIR: DATA_DIR,
@@ -182,7 +202,7 @@ function brailleActionIds() {
 }
 
 async function main() {
-  console.log("ABC Braille adapter contract: local web facsimile + exact text persistence");
+  console.log(`${CONTRACT_PROVIDER} contract: local ABC facsimile + exact text persistence`);
   const requests = [];
   const abc = await startAbcFacsimile(requests);
   const app = startApp();
@@ -198,8 +218,21 @@ async function main() {
     const task = stored.brailleTasks.find((candidate) => candidate.id === taskId);
     check("ABC output is stored word for word", task?.transcription?.draftText === EXACT_DRAFT);
     check("editable pane value starts as the exact ABC output", task?.transcription?.editedText === EXACT_DRAFT);
-    check("private provider provenance remains server-side", task?.transcription?.aiProvider === "abc_braille_web");
+    check("private provider provenance remains server-side", task?.transcription?.aiProvider === CONTRACT_PROVIDER);
     check("no confidence score is fabricated", task?.transcription?.confidence === 0);
+    if (CONTRACT_PROVIDER === "abc_openai_review") {
+      check("hybrid keeps the ABC text as the primary draft", task?.transcription?.draftText === EXACT_DRAFT);
+      check("missing secondary services are controlled", task?.transcription?.review?.status === "unavailable");
+      check("secondary review never writes a replacement", task?.transcription?.review?.discrepancies?.length === 0);
+      if (CONTRACT_LIBLOUIS_ENABLED) {
+        check("deterministic back-translation ran", task?.transcription?.review?.backTranslationAvailable === true);
+        check("back-translation evidence is retained", Boolean(task?.transcription?.review?.backTranslationText));
+        check("engine agreement is calculated", typeof task?.transcription?.review?.primaryBackTranslationAgreement === "number");
+        check("confidence is identified as consensus", task?.transcription?.confidenceBasis === "consensus");
+      } else {
+        check("consensus confidence is withheld without Liblouis", task?.transcription?.confidenceBasis === "not_supplied");
+      }
+    }
 
     check("three-step ABC workflow used", requests.length === 3, requests.map((request) => `${request.method} ${request.path}`).join(", "));
     check("image sent as multipart file", requests[0]?.body.includes(Buffer.from('name="file"')));
@@ -213,6 +246,18 @@ async function main() {
       !page.includes("abc_braille_web") && !page.includes("abc-braille-") && !page.includes("ABC Braille"),
     );
     check("staff-facing provenance is generic", page.includes("Live transcription"));
+    if (CONTRACT_PROVIDER === "abc_openai_review") {
+      check("hybrid evidence panel is rendered", page.includes("Hybrid review evidence"));
+      check("UI says suggestions are never auto-applied", page.includes("never applied automatically"));
+      check(
+        "hybrid implementation identities remain server-side",
+        !page.includes("abc_openai_review") && !page.includes("OpenAI") && !page.includes("Liblouis"),
+      );
+      if (CONTRACT_LIBLOUIS_ENABLED) {
+        check("staff UI labels consensus confidence", page.includes("Consensus confidence"));
+        check("staff UI includes deterministic evidence", page.includes("Deterministic back-translation"));
+      }
+    }
   } finally {
     stopApp(app);
     abc.close();

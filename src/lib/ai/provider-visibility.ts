@@ -5,7 +5,7 @@ import type { BrailleTask } from "@/lib/types";
  * stored server-side for provenance, debugging, and evaluation, but must not be sent to
  * or rendered for staff users.
  */
-const PRIVATE_PROVIDER_IDENTITIES = new Set(["abc_braille_web"]);
+const PRIVATE_PROVIDER_IDENTITIES = new Set(["abc_braille_web", "abc_openai_review"]);
 
 export function isPrivateProviderIdentity(provider?: string | null): boolean {
   return Boolean(provider && PRIVATE_PROVIDER_IDENTITIES.has(provider));
@@ -27,6 +27,7 @@ export function redactPrivateBrailleProvenance(task: BrailleTask): BrailleTask {
       aiModel: null,
       promptVersion: null,
       aiRequestId: null,
+      review: transcription.review ? { ...transcription.review, model: null } : transcription.review,
     },
   };
 }

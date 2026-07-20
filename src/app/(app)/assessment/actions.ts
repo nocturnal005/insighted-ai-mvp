@@ -8,10 +8,8 @@ import { db, id, recordAudit, createUpload, uploadDataUrl } from "@/lib/store";
 import { getVisualTask, getTaskUpload } from "@/lib/data";
 import { describeVisual, mapFlagsToAnswerSensitiveFlags, summariseFlags, toStoredFlags } from "@/lib/ai";
 import { assertValidUpload } from "@/lib/upload-guard";
+import { hasCompleteAssessmentContext, isAssessmentLikeContext, parseAssessmentContext } from "@/lib/assessment-context";
 import type { HintTier, VisualDescriptionTask } from "@/lib/types";
-
-/** Contexts where a missing prompt/skill is an assessment-safety risk worth surfacing. */
-const ASSESSMENT_CONTEXTS = new Set(["class_test", "mock_assessment", "formal_assessment_preparation", "assessment"]);
 
 export async function createVisualTask(formData: FormData) {
   const user = requireUser();
@@ -21,11 +19,16 @@ export async function createVisualTask(formData: FormData) {
   const subject = String(formData.get("subject") || "").trim() || null;
   const yearGroup = String(formData.get("yearGroup") || "").trim() || null;
   const pupilId = String(formData.get("pupilId") || "") || null;
-  const context = String(formData.get("context") || "lesson") as VisualDescriptionTask["context"];
+  const context = parseAssessmentContext(formData.get("context"), "lesson");
   const questionPrompt = String(formData.get("questionPrompt") || "").trim() || null;
   const assessedSkill = String(formData.get("assessedSkill") || "").trim() || null;
   const file = formData.get("image") as File | null;
   if (!title) throw new Error("Title is required");
+  if (!file || file.size === 0) throw new Error("A source visual is required");
+  assertValidUpload(file);
+  if (!hasCompleteAssessmentContext(context, questionPrompt, assessedSkill)) {
+    throw new Error("Question prompt and assessed skill are required for assessment use");
+  }
 
   const now = new Date().toISOString();
   const task: VisualDescriptionTask = {
@@ -47,7 +50,6 @@ export async function createVisualTask(formData: FormData) {
   // Store the upload (if any) and capture its bytes to feed the vision provider.
   let dataUrl: string | undefined;
   if (file && file.size > 0) {
-    assertValidUpload(file);
     const buf = Buffer.from(await file.arrayBuffer());
     task.uploadId = createUpload({
       taskId: task.id, module: "visual", fileName: file.name, fileType: file.type,
@@ -73,9 +75,12 @@ async function generateVisualDescription(
   dataUrl: string | undefined,
   reason?: string,
 ) {
+  const upload = getTaskUpload(task.id);
   const result = await describeVisual({
     taskId: task.id,
     title: task.title,
+    fileName: upload?.fileName,
+    mimeType: upload?.fileType,
     subject: task.subject,
     yearGroup: task.yearGroup,
     context: task.context,
@@ -92,7 +97,8 @@ async function generateVisualDescription(
   task.aiProvider = result.meta.provider;
   task.aiModel = result.meta.model;
   task.aiMode = result.meta.mode;
-  task.confidence = result.confidence;
+  const storedConfidence = result.meta.mode === "mock" ? null : result.confidence;
+  task.confidence = storedConfidence;
   task.promptVersion = result.meta.promptVersion;
   task.processingMs = result.meta.processingMs;
   task.aiFlags = toStoredFlags(result.answerSensitiveFlags);
@@ -109,7 +115,7 @@ async function generateVisualDescription(
     newStatus: task.status,
     provider: result.meta.provider,
     model: result.meta.model,
-    confidence: result.confidence,
+    confidence: storedConfidence,
     processingMs: result.meta.processingMs,
     aiMode: result.meta.mode,
     promptVersion: result.meta.promptVersion,
@@ -132,7 +138,7 @@ export async function updateVisualContext(taskId: string, formData: FormData) {
 
   task.questionPrompt = String(formData.get("questionPrompt") || "").trim() || null;
   task.assessedSkill = String(formData.get("assessedSkill") || "").trim() || null;
-  task.context = String(formData.get("context") || task.context) as VisualDescriptionTask["context"];
+  task.context = parseAssessmentContext(formData.get("context"), task.context);
   const tier = String(formData.get("hintTier") || task.hintTier) as HintTier;
   if (tier === "tier_0" || tier === "tier_1" || tier === "tier_2") task.hintTier = tier;
   task.updatedAt = new Date().toISOString();
@@ -146,7 +152,7 @@ export async function updateVisualContext(taskId: string, formData: FormData) {
     objectLabel: task.title,
     taskId: task.id,
     reason:
-      ASSESSMENT_CONTEXTS.has(task.context) && (!task.questionPrompt || !task.assessedSkill)
+      isAssessmentLikeContext(task.context) && (!task.questionPrompt || !task.assessedSkill)
         ? "Assessment context set without question prompt and/or assessed skill"
         : null,
   });
@@ -201,6 +207,16 @@ export async function approveVisual(taskId: string, editedDescription?: string, 
   if (!can(user.role, "visual.approve")) throw new Error("Only a teacher or QTVI can approve");
   const task = getVisualTask(taskId);
   if (!task) throw new Error("Not found");
+  const upload = getTaskUpload(taskId);
+  if (!upload || !uploadDataUrl(upload)) throw new Error("The source visual is unavailable. Re-upload it before approval.");
+  if (!hasCompleteAssessmentContext(task.context, task.questionPrompt, task.assessedSkill)) {
+    throw new Error("Add the question prompt and assessed skill, then regenerate before approval.");
+  }
+  if (!String(editedDescription ?? task.editedDescription).trim()) throw new Error("A reviewed description is required");
+  const blockingFlag = (task.aiFlags ?? []).find((flag) =>
+    ["provider_unavailable", "processing_failed", "real_pupil_data_blocked", "pdf_processing_pending"].includes(flag.category),
+  );
+  if (blockingFlag) throw new Error(`Approval blocked: ${blockingFlag.reason}`);
 
   const previousStatus = task.status;
   if (typeof editedDescription === "string") task.editedDescription = editedDescription;

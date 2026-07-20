@@ -12,14 +12,14 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4", className)}
+      className={cn("flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4", className)}
       {...props}
     />
   );
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("text-[15px] font-semibold text-zinc-900", className)} {...props} />;
+  return <h2 className={cn("min-w-0 break-words text-[15px] font-semibold text-zinc-900", className)} {...props} />;
 }
 
 export function CardBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

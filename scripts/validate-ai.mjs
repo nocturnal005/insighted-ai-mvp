@@ -62,6 +62,21 @@ const behaviours = [
     includes: ["requiresSpecialistReview: true", "requiresSpecialistReviewFlag", "Non-specialist Braille draft"],
   },
   {
+    name: "hybrid OpenAI review uses schema-validated discrepancy output",
+    file: "src/lib/ai/providers/openai-vision-provider.ts",
+    includes: ["brailleReviewSchema", "zodResponseFormat", "chat.completions.parse", "Never rewrite or replace"],
+  },
+  {
+    name: "hybrid Braille processing preserves the primary draft",
+    file: "src/lib/ai/providers/hybrid-braille-provider.ts",
+    includes: ["draftText: primary.draftText", "reviewBrailleWithOpenAI", "primaryLiblouisAgreement"],
+  },
+  {
+    name: "Braille preprocessing produces lossless review crops",
+    file: "src/lib/ai/braille-preprocessing.ts",
+    includes: ["webp({ lossless: true", "reviewImageUrls", "overlap"],
+  },
+  {
     name: "the public Braille service always requires specialist review",
     file: "src/lib/ai/index.ts",
     includes: ["requiresSpecialistReview: true"],
@@ -134,7 +149,7 @@ const behaviours = [
   {
     name: "Liblouis is optional and never mandatory (disabled path returns provider_unavailable)",
     file: "src/lib/ai/providers/braille-translation-provider.ts",
-    includes: ["config.enabled", "providerUnavailableFlag", "runLiblouisCli"],
+    includes: ["config.enabled", "providerUnavailableFlag", "runLiblouisCli", '"--display-table"', "config.displayTable"],
   },
   {
     name: "mock mode stays fully offline (no network in the mock provider)",

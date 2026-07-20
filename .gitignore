@@ -11,6 +11,7 @@ npm-debug.log*
 .env*.local
 .insighted-data/
 .npm-cache/
+.tools/
 tsconfig.tsbuildinfo
 .vscode/*
 .idea
