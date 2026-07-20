@@ -4,7 +4,7 @@
 
 InsightEd AI is a controlled-demo and pilot-readiness MVP for mainstream secondary school VI support workflows. The workflow mechanics are functional: role checks, specialist verification, teacher feedback approval, audit logging, exports, local persistence, upload metadata, and retention deletion.
 
-The AI/OCR layer is provider-based. **Run transcription** sends an unlinked PNG/JPEG to ABC Braille's image-to-text workflow by default and places its returned lines in the transcription pane without rewriting them. Explicit mock, OpenAI vision, and external JSON OCR providers remain available. Every output is a draft, and Braille accuracy always requires specialist verification before teacher feedback or export.
+The AI/OCR layer is provider-based. The recommended live path sends an unlinked PNG/JPEG to ABC Braille for the primary draft, optionally compares its detected cells with Liblouis, and asks OpenAI for structured discrepancy evidence. OpenAI never replaces the ABC draft or applies a correction. Explicit mock, ABC-only, OpenAI-draft, and external JSON OCR providers remain available. Every output is a draft, and Braille accuracy always requires specialist verification before teacher feedback or export.
 
 ## Run It
 
@@ -36,7 +36,7 @@ Copy `.env.example` to `.env` and adjust. Missing keys never crash the app — a
 | `OPENAI_API_KEY` | _(empty)_ | Server-only OpenAI key. Never logged, shown, or audited. |
 | `OPENAI_VISION_MODEL` | `gpt-4.1` | Vision model for visual/STEM/Braille-draft. |
 | `OPENAI_TEXT_MODEL` | `gpt-4.1` | Text model (reserved for future text-only steps). |
-| `BRAILLE_OCR_PROVIDER` | `abc_braille_web` | `abc_braille_web` \| `mock` \| `openai_vision_draft` \| `external_braille_ocr`. |
+| `BRAILLE_OCR_PROVIDER` | `abc_braille_web` | `abc_openai_review` (recommended live path) \| `abc_braille_web` \| `mock` \| `openai_vision_draft` \| `external_braille_ocr`. |
 | `ABC_BRAILLE_BASE_URL` | `https://www.abcbraille.com` | Server-only base URL for ABC Braille's public web translator. Loopback HTTP is accepted only for contract tests. |
 | `ABC_BRAILLE_LANGUAGE_TABLE` | `en-ueb-g2.ctb` | ABC Braille translation table used by Run transcription. |
 | `ABC_BRAILLE_TIMEOUT_MS` | `120000` | Total timeout for ABC Braille's upload, scan, and results workflow. |
@@ -46,6 +46,7 @@ Copy `.env.example` to `.env` and adjust. Missing keys never crash the app — a
 | `LIBLOUIS_ENABLED` | `false` | Enable the optional Liblouis back-translation CLI. Off by default. |
 | `LIBLOUIS_COMMAND` | _(empty)_ | Path to a `lou_translate`-style CLI (only used when enabled). |
 | `LIBLOUIS_TABLE` | `en-ueb-g2.ctb` | Liblouis translation table. |
+| `LIBLOUIS_DISPLAY_TABLE` | `unicode.dis` | Display table required for Unicode Braille-pattern input. |
 | `LIBLOUIS_TIMEOUT_MS` | `5000` | Timeout for the Liblouis CLI call. |
 | `MAX_UPLOAD_MB` | `10` | Upload size cap enforced centrally in preprocessing/validation. |
 | `ALLOWED_UPLOAD_TYPES` | `image/png,image/jpeg,image/jpg,application/pdf` | Accepted upload MIME types (includes `image/jpg`). |
@@ -71,6 +72,17 @@ BRAILLE_OCR_PROVIDER=openai_vision_draft
 
 Visual and STEM descriptions and the Braille draft are generated from the uploaded image. OpenAI Braille output is explicitly a **non-specialist draft**, uses conservative confidence, and always requires QTVI/Braille-literate verification. On any provider or JSON-validation failure the app returns a controlled fallback draft with a high-severity flag — raw provider errors and secrets are never surfaced.
 
+### Run the recommended hybrid Braille review
+
+```env
+AI_MODE=real
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+BRAILLE_OCR_PROVIDER=abc_openai_review
+```
+
+ABC remains the source of `draftText`. Braille-specific preprocessing supplies OpenAI with a lossless whole-page image and, for large pages, overlapping high-detail bands. Liblouis back-translation is included when configured. OpenAI returns schema-validated discrepancy records only; staff see the evidence beside the editable draft, and no suggestion is ever applied automatically. A numeric consensus confidence is shown only when ABC and Liblouis both produce comparable text.
+
 ## AI/OCR Provider Architecture
 
 All AI/OCR lives behind `src/lib/ai/` and is reached through three functions in `src/lib/ai/index.ts`:
@@ -89,7 +101,12 @@ Providers under `src/lib/ai/providers/`:
 * **mock-provider** — deterministic offline drafts for every capability; powers demo mode.
 * **openai-vision-provider** — OpenAI vision for visual/STEM descriptions and a labelled non-specialist Braille draft (`visual-description-v1`, `stem-description-v1`, `braille-openai-draft-v1`).
 * **external-braille-provider** — adapter for a specialist Braille OCR HTTP engine.
-* **braille-translation-provider** — Liblouis-ready back-translation interface (optional; stubbed).
+* **braille-translation-provider** — optional Liblouis back-translation interface with a pinned local Windows installer.
+
+Additional hybrid components:
+
+* **hybrid-braille-provider** — preserves the ABC draft, adds optional Liblouis agreement, and exposes OpenAI discrepancy evidence for specialist review.
+* **braille-preprocessing** — produces a lossless whole-page review image plus overlapping horizontal bands for small Braille-dot detail.
 
 ### ABC Braille image-to-text workflow
 
@@ -148,8 +165,20 @@ Key points:
 
 Liblouis is intentionally optional and controlled by env:
 
+Install the pinned official Windows x64 runtime locally with `npm run setup:liblouis`.
+The installer verifies the release SHA-256 before extracting it under the ignored
+`.tools/liblouis/` directory and prints the exact `.env.local` values to use. The runtime
+archive is not committed to source control. After configuration, run
+`npm run validate:liblouis` to verify Unicode UEB Grade 2 back-translation locally.
+
+The included installer targets the Windows demo workstation. A Linux production or
+serverless deployment must provide its own compatible Liblouis runtime and set the same
+environment variables; the Windows executable must not be deployed there. Liblouis is
+LGPL-licensed and its command-line tools are GPLv3; the installer downloads the unmodified
+official release rather than redistributing its binary in this repository.
+
 * `LIBLOUIS_ENABLED=false` (default) — the provider reports `provider_unavailable`; the build never depends on a native Liblouis binding or on Duxbury.
-* `LIBLOUIS_ENABLED=true` with `LIBLOUIS_COMMAND` pointing at a `lou_translate`-style CLI — the provider shells out (with `LIBLOUIS_TIMEOUT_MS`) to back-translate, feeding the Braille on stdin against `LIBLOUIS_TABLE`. A missing or slow binary degrades gracefully and never crashes the app.
+* `LIBLOUIS_ENABLED=true` with `LIBLOUIS_COMMAND` pointing at a `lou_translate`-style CLI — the provider shells out (with `LIBLOUIS_TIMEOUT_MS`) to back-translate, feeding Unicode Braille on stdin against `LIBLOUIS_TABLE` and `LIBLOUIS_DISPLAY_TABLE`. A missing or slow binary degrades gracefully and never crashes the app.
 
 When the external Braille OCR adapter returns raw Braille, it optionally invokes this provider and records whether Liblouis was available (it never overrides the engine's own draft text). Liblouis is **never** required for `npm install`, `npm run typecheck`, or `npm run build`. Duxbury is not used.
 

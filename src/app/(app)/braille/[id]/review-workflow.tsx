@@ -11,7 +11,7 @@ import { ExportMenu } from "@/components/export-menu";
 import { AiMeta } from "@/components/ai-meta";
 import { ExportGateHint } from "@/components/gate-hint";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
-import type { BrailleTask } from "@/lib/types";
+import type { BrailleHybridReview, BrailleTask } from "@/lib/types";
 import {
   runTranscription, rerunBrailleTranscription, saveTranscription, verifyTranscription,
   createFeedback, saveFeedback, approveFeedback, rejectBrailleTask, archiveBrailleTask,
@@ -35,7 +35,9 @@ export function ReviewWorkflow({
 }) {
   const t = task.transcription;
   const verified = t?.status === "specialist_verified";
-  const confidenceNotSupplied = privateProvenance;
+  const confidenceNotSupplied =
+    t?.confidenceBasis === "not_supplied" || (!t?.confidenceBasis && privateProvenance);
+  const hybridReview = t?.review;
   const mockDraft = t?.aiMode === "mock";
   const fb = task.feedback;
   const fbApproved = fb?.status === "approved";
@@ -144,7 +146,7 @@ export function ReviewWorkflow({
         <Card>
           <CardHeader>
             <CardTitle>Transcription</CardTitle>
-            <div className="flex items-center gap-3"><span className="text-xs text-zinc-400">{confidenceNotSupplied ? "Confidence not supplied" : `Confidence ${Math.round(t.confidence * 100)}%`}</span><TranscriptionBadge status={t.status} /></div>
+            <div className="flex items-center gap-3"><span className="text-xs text-zinc-400">{confidenceNotSupplied ? "Confidence not supplied" : `${t.confidenceBasis === "consensus" ? "Consensus confidence" : "Confidence"} ${Math.round(t.confidence * 100)}%`}</span><TranscriptionBadge status={t.status} /></div>
           </CardHeader>
           <CardBody className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -152,7 +154,7 @@ export function ReviewWorkflow({
                 mode={t.aiMode}
                 provider={t.aiProvider}
                 model={t.aiModel}
-                confidence={confidenceNotSupplied ? null : t.confidence}
+                confidence={confidenceNotSupplied || t.confidenceBasis === "consensus" ? null : t.confidence}
                 promptVersion={t.promptVersion}
                 processingMs={t.processingMs}
                 flagCount={t.aiFlags?.length}
@@ -191,6 +193,7 @@ export function ReviewWorkflow({
                 <span><span className="font-semibold">Demo placeholder only.</span> This text was not read from the uploaded image. Enable live image transcription and run transcription again before specialist verification.</span>
               </div>
             )}
+            {hybridReview && <HybridReviewEvidence review={hybridReview} />}
             <div>
               <label htmlFor="transcript" className="mb-1.5 block text-sm font-medium text-zinc-700">English transcription</label>
               <textarea id="transcript" value={transcriptValue} onChange={(e) => setText(e.target.value)} readOnly={verified || !permissions.canEdit} rows={7} placeholder={needsSpecialistTranscription ? "Enter the specialist transcription from the source image." : undefined} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
@@ -273,6 +276,93 @@ export function ReviewWorkflow({
           </CardBody>
         </Card>
       )}
+    </div>
+  );
+}
+
+function HybridReviewEvidence({ review }: { review: BrailleHybridReview }) {
+  const agreement = review.primaryBackTranslationAgreement;
+  const completed = review.status === "completed";
+  const statusClasses = completed
+    ? "bg-positive-50 text-positive-700"
+    : "bg-caution-50 text-caution-700";
+
+  return (
+    <section className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4" aria-labelledby="hybrid-review-heading">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 id="hybrid-review-heading" className="text-sm font-semibold text-zinc-900">Hybrid review evidence</h3>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+            Suggestions are review evidence only and are never applied automatically to the primary OCR draft.
+          </p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses}`}>
+          {review.status === "completed" ? "Review completed" : `Review ${review.status}`}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+        <div className="rounded-lg bg-white px-3 py-2 text-zinc-600">
+          <span className="block text-zinc-400">Primary / back-translation agreement</span>
+          <span className="mt-0.5 block font-semibold text-zinc-800">
+            {agreement === null ? "Not available" : `${Math.round(agreement * 100)}%`}
+          </span>
+        </div>
+        <div className="rounded-lg bg-white px-3 py-2 text-zinc-600">
+          <span className="block text-zinc-400">Review images</span>
+          <span className="mt-0.5 block font-semibold text-zinc-800">{review.reviewImageCount}</span>
+        </div>
+        <div className="rounded-lg bg-white px-3 py-2 text-zinc-600">
+          <span className="block text-zinc-400">Discrepancies</span>
+          <span className="mt-0.5 block font-semibold text-zinc-800">{review.discrepancies.length}</span>
+        </div>
+      </div>
+
+      <p className="mt-3 text-sm leading-relaxed text-zinc-700">{review.summary}</p>
+
+      {review.discrepancies.length > 0 ? (
+        <ul className="mt-3 space-y-2">
+          {review.discrepancies.map((item, index) => (
+            <li key={`${item.lineNumber ?? "unknown"}-${item.issueType}-${index}`} className="rounded-lg border border-zinc-200 bg-white p-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-semibold text-zinc-800">{item.lineNumber ? `Line ${item.lineNumber}` : "Line not identified"}</span>
+                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600">{item.issueType.replace(/_/g, " ")}</span>
+                <span className={item.severity === "high" ? "text-critical-600" : item.severity === "medium" ? "text-caution-700" : "text-zinc-500"}>
+                  {item.severity} · {Math.round(item.confidence * 100)}% finding confidence
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-zinc-700">
+                <span className="font-medium">Observed:</span> {item.sourceText || "No exact excerpt supplied"}
+                {item.suggestedText && <><span className="mx-1.5 text-zinc-300">→</span><span className="font-medium">Suggested:</span> {item.suggestedText}</>}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-500">{item.reason}</p>
+            </li>
+          ))}
+        </ul>
+      ) : completed ? (
+        <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-zinc-500">
+          No additional discrepancy was identified. This is not a verification of accuracy.
+        </p>
+      ) : null}
+
+      {(review.rawBraille || review.backTranslationText) && (
+        <details className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-zinc-600">Show engine comparison text</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {review.rawBraille && <EvidenceText label="Primary detected Braille" value={review.rawBraille} />}
+            {review.backTranslationText && <EvidenceText label="Deterministic back-translation" value={review.backTranslationText} />}
+          </div>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function EvidenceText({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-zinc-500">{label}</p>
+      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-zinc-50 p-2 text-xs text-zinc-700">{value}</pre>
     </div>
   );
 }

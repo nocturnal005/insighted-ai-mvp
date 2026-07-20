@@ -186,6 +186,7 @@ export async function transcribeBrailleWithAbc(input: BrailleOcrInput): Promise<
         // converted to newline separators so the transcription pane matches its result.
         draftText: translatedLines.join("\n"),
         confidence: 0,
+        confidenceBasis: "not_supplied",
         flags: [specialistFlag],
         rawBraille: brailleLines.length ? brailleLines.join("\n") : null,
         rawCells: null,
@@ -211,6 +212,7 @@ function fallback(timer: RunTimer, flags: UncertaintyFlag[]): BrailleOcrResult {
   return {
     draftText: "",
     confidence: 0,
+    confidenceBasis: "not_supplied",
     flags,
     rawBraille: null,
     rawCells: null,

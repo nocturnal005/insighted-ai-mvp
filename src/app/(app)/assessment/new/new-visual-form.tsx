@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { Upload, Loader2, Sparkles } from "lucide-react";
 import { Card, CardBody } from "@/components/ui/card";
 import { UploadPdfNote } from "@/components/upload-note";
+import { ASSESSMENT_CONTEXT_OPTIONS, isAssessmentLikeContext, type AssessmentContext } from "@/lib/assessment-context";
 import { createVisualTask } from "../actions";
 
 function SubmitButton() {
@@ -19,6 +20,8 @@ function SubmitButton() {
 
 export function NewVisualForm({ pupils }: { pupils: { id: string; label: string }[] }) {
   const [fileName, setFileName] = useState<string | null>(null);
+  const [context, setContext] = useState<AssessmentContext>("assessment");
+  const assessmentLike = isAssessmentLikeContext(context);
 
   return (
     <Card>
@@ -40,11 +43,10 @@ export function NewVisualForm({ pupils }: { pupils: { id: string; label: string 
             </div>
             <div>
               <label htmlFor="context" className="mb-1.5 block text-sm font-medium text-zinc-700">Use</label>
-              <select id="context" name="context" className="input" defaultValue="assessment">
-                <option value="lesson">Lesson use</option>
-                <option value="class_test">Class test</option>
-                <option value="mock_assessment">Mock assessment</option>
-                <option value="formal_assessment_preparation">Formal assessment preparation</option>
+              <select id="context" name="context" className="input" value={context} onChange={(event) => setContext(event.target.value as AssessmentContext)}>
+                {ASSESSMENT_CONTEXT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -52,11 +54,12 @@ export function NewVisualForm({ pupils }: { pupils: { id: string; label: string 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label htmlFor="questionPrompt" className="mb-1.5 block text-sm font-medium text-zinc-700">Question prompt or task instruction</label>
-              <textarea id="questionPrompt" name="questionPrompt" rows={3} placeholder="e.g. Describe the motion shown by the distance-time graph." className="input min-h-24 py-2.5" />
+              <textarea id="questionPrompt" name="questionPrompt" required={assessmentLike} rows={3} placeholder="e.g. Explain the function of each labelled organ." className="input min-h-24 py-2.5" />
             </div>
             <div>
               <label htmlFor="assessedSkill" className="mb-1.5 block text-sm font-medium text-zinc-700">What is being assessed?</label>
-              <textarea id="assessedSkill" name="assessedSkill" rows={3} placeholder="e.g. Interpreting gradient and comparing speeds, without giving the trend away." className="input min-h-24 py-2.5" />
+              <textarea id="assessedSkill" name="assessedSkill" required={assessmentLike} rows={3} placeholder="e.g. Explaining the functions of organs in the digestive system." className="input min-h-24 py-2.5" />
+              <p className="mt-1.5 text-xs text-zinc-400">Describe what the learner must do, using an action such as identify, compare, interpret, calculate or explain.</p>
             </div>
           </div>
 
@@ -73,8 +76,8 @@ export function NewVisualForm({ pupils }: { pupils: { id: string; label: string 
             <label htmlFor="image" className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 px-4 py-9 text-center transition-colors hover:border-accent-300 hover:bg-accent-50/30">
               <Upload className="h-6 w-6 text-zinc-400" />
               <span className="mt-2 text-sm text-zinc-700">{fileName ?? "Click to choose an image"}</span>
-              <span className="mt-0.5 text-xs text-zinc-400">PNG or JPEG · optional for this demo</span>
-              <input id="image" name="image" type="file" accept="image/png,image/jpeg,application/pdf" className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
+              <span className="mt-0.5 text-xs text-zinc-400">PNG, JPEG or PDF · required</span>
+              <input id="image" name="image" type="file" accept="image/png,image/jpeg,application/pdf" required className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
             </label>
             <UploadPdfNote />
           </div>

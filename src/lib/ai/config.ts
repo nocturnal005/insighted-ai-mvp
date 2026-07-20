@@ -19,6 +19,7 @@ const DEFAULT_ABC_BRAILLE_TIMEOUT_MS = 120000;
 const DEFAULT_ABC_BRAILLE_URL = "https://www.abcbraille.com";
 const DEFAULT_ABC_BRAILLE_TABLE = "en-ueb-g2.ctb";
 const DEFAULT_LIBLOUIS_TABLE = "en-ueb-g2.ctb";
+const DEFAULT_LIBLOUIS_DISPLAY_TABLE = "unicode.dis";
 const DEFAULT_LIBLOUIS_TIMEOUT_MS = 5000;
 
 function readEnv(name: string): string | undefined {
@@ -45,6 +46,8 @@ function normaliseBrailleProvider(raw: string | undefined): BrailleOcrProviderNa
       return "external_braille_ocr";
     case "abc_braille_web":
       return "abc_braille_web";
+    case "abc_openai_review":
+      return "abc_openai_review";
     default:
       // A typo must never cause a real-provider upload. Only an unset value defaults to
       // ABC Braille; an invalid explicit value keeps the original safe mock fallback.
@@ -87,7 +90,9 @@ export function getAiConfig(): AiConfig {
     textModel: readEnv("OPENAI_TEXT_MODEL") ?? DEFAULT_TEXT_MODEL,
     hasOpenAiKey: Boolean(readEnv("OPENAI_API_KEY")),
     hasBrailleEndpoint:
-      normaliseBrailleProvider(readEnv("BRAILLE_OCR_PROVIDER")) === "abc_braille_web" ||
+      ["abc_braille_web", "abc_openai_review"].includes(
+        normaliseBrailleProvider(readEnv("BRAILLE_OCR_PROVIDER")),
+      ) ||
       Boolean(readEnv("BRAILLE_OCR_ENDPOINT") ?? inAppBrailleEndpoint()),
     allowRealPupilData: readEnv("ALLOW_REAL_PUPIL_DATA") === "true",
   };
@@ -160,6 +165,7 @@ export interface LiblouisConfig {
   enabled: boolean;
   command: string | undefined;
   table: string;
+  displayTable: string;
   timeoutMs: number;
 }
 
@@ -172,6 +178,7 @@ export function getLiblouisConfig(): LiblouisConfig {
     enabled: readEnv("LIBLOUIS_ENABLED") === "true",
     command: readEnv("LIBLOUIS_COMMAND"),
     table: readEnv("LIBLOUIS_TABLE") ?? DEFAULT_LIBLOUIS_TABLE,
+    displayTable: readEnv("LIBLOUIS_DISPLAY_TABLE") ?? DEFAULT_LIBLOUIS_DISPLAY_TABLE,
     timeoutMs: parsePositiveInt(readEnv("LIBLOUIS_TIMEOUT_MS"), DEFAULT_LIBLOUIS_TIMEOUT_MS),
   };
 }

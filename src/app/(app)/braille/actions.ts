@@ -93,6 +93,7 @@ async function executeTranscription(
     title: task.title,
     fileName: upload?.fileName,
     mimeType: upload?.fileType,
+    byteSize: upload?.byteSize,
     dataUrl: dataUrl || undefined,
     subject: task.subject,
     yearGroup: pupil?.yearGroup ?? null,
@@ -106,6 +107,7 @@ async function executeTranscription(
     finalText: null,
     status: "needs_specialist_review",
     confidence: result.confidence,
+    confidenceBasis: result.confidenceBasis,
     lowConfidenceRegions: regions,
     engine: result.meta.model,
     specialistVerifiedBy: null,
@@ -123,6 +125,21 @@ async function executeTranscription(
     processingMs: result.meta.processingMs,
     aiFlags: toStoredFlags(result.flags),
     aiRequestId: result.providerRequestId ?? null,
+    rawBraille: result.rawBraille ?? null,
+    review: result.review
+      ? {
+          status: result.review.status,
+          summary: result.review.summary,
+          discrepancies: result.review.discrepancies,
+          rawBraille: result.review.rawBraille,
+          backTranslationText: result.review.liblouisText,
+          backTranslationAvailable: result.review.liblouisAvailable,
+          primaryBackTranslationAgreement: result.review.primaryLiblouisAgreement,
+          reviewImageCount: result.review.reviewImageCount,
+          model: result.review.model,
+          processingMs: result.review.processingMs,
+        }
+      : null,
   };
   task.status = "needs_specialist_review";
   task.updatedAt = new Date().toISOString();
@@ -138,7 +155,7 @@ async function executeTranscription(
     newStatus: task.status,
     provider: result.meta.provider,
     model: result.meta.model,
-    confidence: result.meta.provider === "abc_braille_web" ? null : result.confidence,
+    confidence: result.confidenceBasis === "not_supplied" ? null : result.confidence,
     processingMs: result.meta.processingMs,
     aiMode: result.meta.mode,
     promptVersion: result.meta.promptVersion,

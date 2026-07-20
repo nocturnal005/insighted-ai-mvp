@@ -25,8 +25,10 @@ import os
 import secrets
 from http.server import BaseHTTPRequestHandler
 
+from app.core.config import get_settings
 from app.models.requests import OcrRequest
 from app.ocr.pipeline import run_ocr
+from app.translation.liblouis_adapter import is_grade2_table, liblouis_available
 
 # Refuse anything larger than the engine's own intake ceiling before parsing, so
 # an oversized body cannot be buffered into memory inside the function.
@@ -91,7 +93,22 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         """Liveness probe — confirms the function and engine imported cleanly."""
-        self._respond(200, {"status": "ok", "engine": "in-app"})
+        settings = get_settings()
+        translation_available = settings.liblouis_enabled and liblouis_available()
+        self._respond(
+            200,
+            {
+                "status": "ok",
+                "engine": settings.service_name,
+                "version": settings.service_version,
+                "capabilities": {
+                    "templateReader": True,
+                    "liblouis": translation_available,
+                    "grade2": translation_available
+                    and is_grade2_table(settings.liblouis_table),
+                },
+            },
+        )
 
     def _respond(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")

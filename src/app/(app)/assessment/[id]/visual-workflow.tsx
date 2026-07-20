@@ -7,6 +7,7 @@ import { ExportMenu } from "@/components/export-menu";
 import { AiMeta } from "@/components/ai-meta";
 import { ExportGateHint } from "@/components/gate-hint";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
+import { ASSESSMENT_CONTEXT_OPTIONS, hasCompleteAssessmentContext, isAssessmentLikeContext } from "@/lib/assessment-context";
 import type { HintTier, VisualDescriptionTask } from "@/lib/types";
 import { updateVisual, updateVisualContext, rerunVisualDescription, approveVisual, rejectVisual } from "../actions";
 
@@ -15,16 +16,6 @@ const TIERS: { value: HintTier; label: string; blurb: string }[] = [
   { value: "tier_1", label: "Tier 1", blurb: "Orientation: structure, labels, layout" },
   { value: "tier_2", label: "Tier 2", blurb: "Teacher-controlled support (not formal assessment)" },
 ];
-
-const CONTEXTS: { value: VisualDescriptionTask["context"]; label: string }[] = [
-  { value: "lesson", label: "Lesson / teaching" },
-  { value: "class_test", label: "Class test" },
-  { value: "mock_assessment", label: "Mock assessment" },
-  { value: "formal_assessment_preparation", label: "Formal assessment prep" },
-  { value: "assessment", label: "Assessment" },
-];
-
-const ASSESSMENT_LIKE = new Set(["class_test", "mock_assessment", "formal_assessment_preparation", "assessment"]);
 
 interface Perms { canApprove: boolean; canEdit: boolean; canReject: boolean; canExport: boolean }
 
@@ -41,14 +32,27 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
   const [reason, setReason] = useState("");
   const [pending, start] = useTransition();
   const [action, setAction] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const contextRisk = ASSESSMENT_LIKE.has(context) && (!questionPrompt.trim() || !assessedSkill.trim());
+  const contextRisk = !hasCompleteAssessmentContext(context, questionPrompt, assessedSkill);
   const aiFlags = task.aiFlags ?? [];
   const aiUnavailable = aiFlags.some((f) => f.category === "provider_unavailable" || f.category === "processing_failed" || f.category === "real_pupil_data_blocked");
+  const sourceUnavailable = !upload?.src;
+  const effectiveText = text ?? task.editedDescription;
+  const approvalBlocked = contextRisk || aiUnavailable || sourceUnavailable || !effectiveText.trim();
 
   function run(name: string, fn: () => Promise<void>) {
+    setError(null);
     setAction(name);
-    start(async () => { await fn(); setAction(null); });
+    start(async () => {
+      try {
+        await fn();
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "The action could not be completed.");
+      } finally {
+        setAction(null);
+      }
+    });
   }
 
   /** Redact a flagged phrase by replacing it inline (staff control over answer leakage). */
@@ -64,13 +68,26 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
         </div>
       )}
 
-      {task.context === "assessment" && !approved && !rejected && (
+      {error && (
+        <div role="alert" className="flex items-start gap-2.5 rounded-xl border border-critical-200 bg-critical-50 px-4 py-3 text-sm text-critical-700">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span><span className="font-medium">Action unavailable.</span> {error}</span>
+        </div>
+      )}
+
+      {isAssessmentLikeContext(task.context) && !approved && !rejected && (
         <div className="flex items-start gap-2.5 rounded-xl border border-caution-200/60 bg-caution-50 px-4 py-3 text-sm text-caution-700">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span><span className="font-medium">Assessment mode.</span> This description cannot be exported until a teacher or QTVI approves it. Redact anything that could reveal an answer.</span>
         </div>
       )}
 
+      {!upload && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-critical-200 bg-critical-50 px-4 py-3 text-sm text-critical-700">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span><span className="font-medium">Source visual missing.</span> Create a new task with the source attached before review or approval.</span>
+        </div>
+      )}
       <SourceImage upload={upload} label="Source visual" />
 
       {/* Assessment context — editable; regenerating re-evaluates answer-sensitivity */}
@@ -88,7 +105,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
           )}
           {approved || !permissions.canEdit ? (
             <dl className="grid gap-2 text-sm">
-              <div className="flex gap-2"><dt className="w-24 shrink-0 text-zinc-400 sm:w-32">Context</dt><dd className="min-w-0 break-words text-zinc-700">{CONTEXTS.find((c) => c.value === context)?.label ?? context}</dd></div>
+              <div className="flex gap-2"><dt className="w-24 shrink-0 text-zinc-400 sm:w-32">Context</dt><dd className="min-w-0 break-words text-zinc-700">{ASSESSMENT_CONTEXT_OPTIONS.find((c) => c.value === context)?.label ?? context}</dd></div>
               <div className="flex gap-2"><dt className="w-24 shrink-0 text-zinc-400 sm:w-32">Question prompt</dt><dd className="min-w-0 break-words text-zinc-700">{questionPrompt || "—"}</dd></div>
               <div className="flex gap-2"><dt className="w-24 shrink-0 text-zinc-400 sm:w-32">Assessed skill</dt><dd className="min-w-0 break-words text-zinc-700">{assessedSkill || "—"}</dd></div>
             </dl>
@@ -97,7 +114,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
               <div>
                 <label htmlFor="ctx" className="mb-1.5 block text-sm font-medium text-zinc-700">Context</label>
                 <select id="ctx" value={context} onChange={(e) => setContext(e.target.value as VisualDescriptionTask["context"])} className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm">
-                  {CONTEXTS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  {ASSESSMENT_CONTEXT_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               <div>
@@ -107,6 +124,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
               <div>
                 <label htmlFor="as" className="mb-1.5 block text-sm font-medium text-zinc-700">Assessed skill</label>
                 <input id="as" value={assessedSkill} onChange={(e) => setAssessedSkill(e.target.value)} placeholder="e.g. reading a gradient from a graph" className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm" />
+                <p className="mt-1.5 text-xs text-zinc-400">State what the learner must do, for example identify, compare, interpret, calculate or explain.</p>
               </div>
               <div className="flex justify-end">
                 <button
@@ -175,7 +193,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
               mode={task.aiMode}
               provider={task.aiProvider}
               model={task.aiModel}
-              confidence={task.confidence}
+              confidence={task.aiMode === "mock" ? null : task.confidence}
               promptVersion={task.promptVersion}
               processingMs={task.processingMs}
               flagCount={aiFlags.length}
@@ -192,10 +210,16 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
               </button>
             )}
           </div>
+          {task.aiMode === "mock" && !aiUnavailable && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm text-zinc-600">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span><span className="font-medium">Demo fixture.</span> This draft uses a predefined scenario matched to the upload name and task context. It demonstrates the review workflow; it is not live computer vision.</span>
+            </div>
+          )}
           {!approved && (
             <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><span>Check that the description gives access to the visual without revealing what the learner is being assessed on.</span></div>
           )}
-          <textarea value={text ?? task.editedDescription} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={6} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
+          <textarea value={effectiveText} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={9} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
 
           {approved ? (
             <>
@@ -214,7 +238,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
                 </div>
               )}
               <div className="flex flex-wrap items-center justify-end gap-2.5">
-                <ExportGateHint className="mr-auto" message="Export locked until approval" />
+                <ExportGateHint className="mr-auto" message={sourceUnavailable ? "Approval locked: source visual unavailable" : contextRisk ? "Approval locked: complete assessment context" : aiUnavailable ? "Approval locked: generate a valid draft" : "Export locked until approval"} />
                 {permissions.canReject && !rejecting && (
                   <button onClick={() => setRejecting(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-zinc-200 px-3.5 text-[13px] text-critical-600 hover:bg-critical-50"><XCircle className="h-3.5 w-3.5" /> Reject</button>
                 )}
@@ -222,7 +246,7 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
                   <button onClick={() => run("save", () => updateVisual(task.id, text ?? task.editedDescription, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
                 )}
                 {permissions.canApprove ? (
-                  <button onClick={() => run("approve", () => approveVisual(task.id, text ?? task.editedDescription, tier))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve for use</button>
+                  <button onClick={() => run("approve", () => approveVisual(task.id, effectiveText, tier))} disabled={pending || approvalBlocked} title={approvalBlocked ? "Resolve the review warnings before approval" : undefined} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve for use</button>
                 ) : (<span className="text-xs text-zinc-400">A teacher or QTVI must approve this.</span>)}
               </div>
             </>

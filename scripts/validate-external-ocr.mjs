@@ -384,10 +384,14 @@ async function main() {
     check("audit has no API key", !finalAudit.includes(CONTRACT_KEY));
     check("audit has no raw provider payload", !finalAudit.includes(RAW_BODY_MARKER));
     const taRedirect = await ta.get("/audit");
+    const taRedirectBody = await taRedirect.text();
+    const taRedirectTarget = `${taRedirect.headers.get("location") || ""} ${taRedirectBody}`;
     check(
       "TA blocked from audit",
-      [302, 303, 307].includes(taRedirect.status) &&
-        (taRedirect.headers.get("location") || "").includes("/dashboard"),
+      ([302, 303, 307].includes(taRedirect.status) || taRedirect.status === 200) &&
+        taRedirectTarget.includes("/dashboard") &&
+        !taRedirectBody.includes("Audit Trail"),
+      `status=${taRedirect.status}`,
     );
 
     // ---- D. OCR Quality correction pair ----------------------------------------

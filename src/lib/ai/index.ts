@@ -18,6 +18,7 @@ import type {
 } from "./types";
 import { getAiConfig } from "./config";
 import { preprocessImage } from "./preprocessing";
+import { preprocessBrailleImage } from "./braille-preprocessing";
 import { finishMeta, startRun } from "./meta";
 import { realPupilDataBlockedFlag, requiresSpecialistReviewFlag } from "./uncertainty";
 import { describeStemMock, describeVisualMock, transcribeBrailleMock } from "./providers/mock-provider";
@@ -28,6 +29,7 @@ import {
 } from "./providers/openai-vision-provider";
 import { transcribeBrailleExternal } from "./providers/external-braille-provider";
 import { transcribeBrailleWithAbc } from "./providers/abc-braille-provider";
+import { transcribeBrailleWithHybridReview } from "./providers/hybrid-braille-provider";
 
 import { assertRealAiDataAllowed, sanitizeProviderText } from "./safety";
 
@@ -123,6 +125,7 @@ function sanitizeVisualInput<T extends VisualDescriptionInput>(input: T): T {
   return {
     ...input,
     title: sanitizeProviderText(input.title) ?? "",
+    fileName: input.fileName ? sanitizeProviderText(input.fileName) ?? undefined : undefined,
     subject: sanitizeProviderText(input.subject),
     yearGroup: sanitizeProviderText(input.yearGroup),
     questionPrompt: sanitizeProviderText(input.questionPrompt),
@@ -157,8 +160,8 @@ async function prepare(input: { dataUrl?: string; imageUrl?: string; mimeType?: 
 
 /**
  * Braille OCR. In mock mode always uses the deterministic mock. In real mode dispatches by
- * `BRAILLE_OCR_PROVIDER`: abc_braille_web (default), openai_vision_draft
- * (non-specialist draft), external_braille_ocr, or explicit mock.
+ * `BRAILLE_OCR_PROVIDER`: abc_openai_review (recommended), abc_braille_web,
+ * openai_vision_draft (non-specialist draft), external_braille_ocr, or explicit mock.
  * Output ALWAYS requires specialist verification.
  */
 export async function transcribeBraille(input: BrailleOcrInput): Promise<BrailleOcrResult> {
@@ -172,11 +175,18 @@ export async function transcribeBraille(input: BrailleOcrInput): Promise<Braille
   // Preflight block: pupil-linked + real mode + not approved → never reach a real provider.
   if (realBraillePupilBlockActive(input.hasLinkedPupil)) return blockedBrailleResult();
 
-  const { dataUrl, imageUrl, warnings } = await prepare(input);
-  const routed = { ...input, dataUrl, imageUrl };
+  const { dataUrl, imageUrl, reviewImageUrls, warnings } = await preprocessBrailleImage({
+    dataUrl: input.dataUrl,
+    imageUrl: input.imageUrl,
+    mimeType: input.mimeType,
+    byteSize: input.byteSize,
+  });
+  const routed = { ...input, dataUrl, imageUrl, reviewImageUrls };
 
   let result: BrailleOcrResult;
-  if (config.brailleOcrProvider === "abc_braille_web") {
+  if (config.brailleOcrProvider === "abc_openai_review") {
+    result = await transcribeBrailleWithHybridReview(sanitizeBrailleInput(routed));
+  } else if (config.brailleOcrProvider === "abc_braille_web") {
     result = await transcribeBrailleWithAbc(sanitizeBrailleInput(routed));
   } else if (config.brailleOcrProvider === "openai_vision_draft") {
     result = await transcribeBrailleWithOpenAIDraft(sanitizeBrailleInput(routed));

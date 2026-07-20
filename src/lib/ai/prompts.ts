@@ -16,8 +16,9 @@ export const PROMPT_VERSIONS = {
   visual: "visual-description-v1",
   stem: "stem-description-v1",
   brailleDraft: "braille-openai-draft-v1",
+  brailleReview: "braille-hybrid-review-v1",
   mockBraille: "mock-braille-v1",
-  mockVisual: "mock-visual-v1",
+  mockVisual: "mock-visual-fixture-v2",
   mockStem: "mock-stem-v1",
 } as const;
 
@@ -116,6 +117,49 @@ export function buildBrailleDraftPrompt(input: {
     "possible_number_sign_issue, possible_capitalisation_issue, line_order_uncertainty,",
     "word_spacing_uncertainty, subject_specific_term, low_ocr_confidence, low_image_quality.",
     "Keep confidence conservative (typically <= 0.6) because this is not specialist OCR.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function buildBrailleReviewPrompt(input: {
+  primaryDraftText: string;
+  rawBraille?: string | null;
+  liblouisText?: string | null;
+  subject?: string | null;
+  yearGroup?: string | null;
+  reviewImageCount: number;
+}): string {
+  return [
+    "You are a SECOND-PASS Braille review assistant. A specialist OCR engine has already",
+    "produced the primary English draft below. The primary draft is immutable: do not",
+    "rewrite it, do not return a replacement transcription, and do not silently correct it.",
+    "Return only evidence-backed discrepancies that a QTVI or Braille-literate specialist",
+    "should inspect. If the image does not support a correction, use suggestedText: null.",
+    "Do not infer a correction merely because another English phrase sounds more likely.",
+    "Pay particular attention to contractions, capitals, number signs, punctuation, spacing,",
+    "line order, and cells whose dot pattern is unclear. Specialist verification is mandatory.",
+    "The first image is the whole page. Any later images are overlapping enhanced bands in",
+    "top-to-bottom order; use them only as additional visual evidence.",
+    input.subject ? `Subject context: ${input.subject}.` : "",
+    input.yearGroup ? `Year group: ${input.yearGroup}.` : "",
+    `Review images supplied: ${input.reviewImageCount}.`,
+    "",
+    "PRIMARY OCR DRAFT (preserve unchanged):",
+    input.primaryDraftText,
+    "",
+    "RAW UNICODE BRAILLE FROM PRIMARY OCR:",
+    input.rawBraille || "(not supplied)",
+    "",
+    "LIBLOUIS BACK-TRANSLATION:",
+    input.liblouisText || "(not available)",
+    "",
+    "Return findings using the supplied strict schema. Use issueType values only from:",
+    "character, word, contraction, number_sign, capitalisation, punctuation, spacing,",
+    "line_order, image_quality, other. Keep sourceText to the shortest exact excerpt that",
+    "locates the concern. Use a 1-based lineNumber when clear, otherwise null. Confidence",
+    "describes confidence in the discrepancy itself, not confidence in the full transcription.",
+    "An empty discrepancies array is valid when no evidence-backed issue is visible.",
   ]
     .filter(Boolean)
     .join("\n");

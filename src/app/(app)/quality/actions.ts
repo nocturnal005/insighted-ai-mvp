@@ -105,16 +105,19 @@ export async function runEvaluation() {
         taskId: sample.id,
         title: sample.label,
         mimeType: dataUrl.startsWith("data:") ? dataUrl.slice(5).split(/[;,]/)[0] : undefined,
+        byteSize: upload?.byteSize,
         dataUrl,
       });
       prediction = r.draftText;
       provider = r.meta.provider;
       model = r.meta.model;
-      confidence = r.meta.provider === "abc_braille_web" ? null : r.confidence;
+      confidence = r.confidenceBasis === "not_supplied" ? null : r.confidence;
       aiMode = r.meta.mode;
       flagSummary = summariseFlags(r.flags);
       promptVersion = r.meta.promptVersion;
       sample.aiFlags = toStoredFlags(r.flags);
+      sample.reviewDiscrepancyCount = r.review?.discrepancies.length ?? null;
+      sample.primaryLiblouisAgreement = r.review?.primaryLiblouisAgreement ?? null;
       aggregateFlags.push(...flagSummary);
     } else {
       // No source image — use mock simulation and label it clearly.
@@ -125,6 +128,8 @@ export async function runEvaluation() {
       aiMode = "mock";
       flagSummary = ["simulated: no source image — mock OCR used"];
       sample.aiFlags = null;
+      sample.reviewDiscrepancyCount = null;
+      sample.primaryLiblouisAgreement = null;
     }
 
     const s = scorePair(prediction, sample.groundTruthText);
@@ -142,7 +147,7 @@ export async function runEvaluation() {
   const config = getAiConfig();
   // De-duplicate the aggregate flag summary for a concise, secret-free audit record.
   const flagSummary = Array.from(new Set(aggregateFlags)).slice(0, 8);
-  const abcBrailleRun = config.brailleOcrProvider === "abc_braille_web";
+  const abcBrailleRun = ["abc_braille_web", "abc_openai_review"].includes(config.brailleOcrProvider);
   recordAudit({
     actorId: user.id,
     actorName: user.fullName,
@@ -151,7 +156,7 @@ export async function runEvaluation() {
     objectType: "Evaluation",
     objectLabel: `${db.evalSamples.length} sample(s)`,
     aiMode: abcBrailleRun ? "real" : config.mode,
-    provider: abcBrailleRun ? "abc_braille_web" : config.mode === "mock" ? "mock" : config.brailleOcrProvider,
+    provider: abcBrailleRun ? config.brailleOcrProvider : config.mode === "mock" ? "mock" : config.brailleOcrProvider,
     promptVersion,
     flagSummary: flagSummary.length ? flagSummary : null,
   });

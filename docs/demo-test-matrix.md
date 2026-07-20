@@ -61,7 +61,7 @@ Legend for the Pass/Fail column: ☐ = not run, ✅ = pass, ❌ = fail.
 
 | Test ID | Feature | Role to use | Input / resource | Steps | Expected result | Pass/Fail | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| VD-01 | Create visual task | Teaching Assistant (Amelia) or Teacher (David) | `demo-resources/visuals/*.png` | Assessment-Safe → New; set title, **context = assessment/class test** | Task created; description auto-generated from the image + context | ✅ | |
+| VD-01 | Create visual task | Teaching Assistant (Amelia) or Teacher (David) | `demo-resources/visuals/*.png` | Assessment-Safe → New; set title, **context = assessment/class test** | Task created; real mode describes the image, while mock mode uses a clearly labelled matching demo fixture | ✅ | Mock fixture output is illustrative and must never be presented as live image analysis. |
 | VD-02 | Upload chart/diagram/image | (same) | Visual image | Attach on the new-task form | Source visual shown | ✅ | |
 | VD-03 | Add question prompt | (same) | — | Fill "Question prompt" (Assessment context card) | Prompt saved; drives answer-safety checks | ✅ | |
 | VD-04 | Add assessed skill | (same) | — | Fill "Assessed skill" → **Save context & regenerate** | Skill saved; description regenerated against new context | ✅ | Missing prompt/skill in assessment context raises a red safety warning. |
