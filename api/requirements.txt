@@ -5,4 +5,6 @@
 # Only the runtime dependencies come with it (NumPy, OpenCV-headless, Pillow,
 # pydantic) — uvicorn is excluded via the engine's optional `serve` extra,
 # keeping this function inside Vercel's 250 MB limit (measured: ~177 MB).
-insighted-braille-ocr @ git+https://github.com/nocturnal005/insighted-braille-ocr-engine.git@main
+# Pin the exact engine revision measured for this MVP. Floating on `main` makes
+# production OCR change without a reproducible app build.
+insighted-braille-ocr @ git+https://github.com/nocturnal005/insighted-braille-ocr-engine.git@ead99513c584fa7a22351ec6aa735b6a3cb9bc70

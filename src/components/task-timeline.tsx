@@ -2,6 +2,7 @@ import { CheckCircle2, Clock3 } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRelative } from "@/lib/utils";
 import { staffLabel } from "@/lib/rbac";
+import { isPrivateProviderIdentity } from "@/lib/ai/provider-visibility";
 import type { AuditEntry } from "@/lib/types";
 
 const ACTION_LABEL: Record<string, string> = {
@@ -61,11 +62,15 @@ export function TaskTimeline({ entries }: { entries: AuditEntry[] }) {
                   </p>
                   {entry.provider && (
                     <p className="mt-0.5 text-[11px] text-zinc-400">
-                      {entry.aiMode ?? "?"} · {entry.provider}
-                      {entry.model ? `/${entry.model}` : ""}
-                      {entry.confidence != null ? ` · ${Math.round(entry.confidence * 100)}% conf` : ""}
+                      {isPrivateProviderIdentity(entry.provider)
+                        ? "Live transcription"
+                        : `${entry.aiMode ?? "?"} · ${entry.provider}`}
+                      {!isPrivateProviderIdentity(entry.provider) && entry.model ? `/${entry.model}` : ""}
+                      {entry.confidence != null && !isPrivateProviderIdentity(entry.provider)
+                        ? ` · ${Math.round(entry.confidence * 100)}% conf`
+                        : ""}
                       {entry.processingMs != null ? ` · ${entry.processingMs}ms` : ""}
-                      {entry.promptVersion ? ` · ${entry.promptVersion}` : ""}
+                      {!isPrivateProviderIdentity(entry.provider) && entry.promptVersion ? ` · ${entry.promptVersion}` : ""}
                     </p>
                   )}
                   {entry.flagSummary && entry.flagSummary.length > 0 && (

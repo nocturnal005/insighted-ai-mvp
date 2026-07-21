@@ -63,7 +63,7 @@ export function NewBrailleForm({ pupils }: { pupils: { id: string; label: string
               <span className="mt-2 text-sm text-zinc-700">
                 {fileName ?? "Click to choose a photo or scan"}
               </span>
-              <span className="mt-0.5 text-xs text-zinc-400">PNG or JPEG · optional for this demo</span>
+              <span className="mt-0.5 text-xs text-zinc-400">PNG or JPEG · maximum 10MB</span>
               <input
                 id="image"
                 name="image"
@@ -73,6 +73,11 @@ export function NewBrailleForm({ pupils }: { pupils: { id: string; label: string
                 onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
               />
             </label>
+            <p className="mt-2 text-xs leading-5 text-zinc-500">
+              For embossed Braille, crop to the Braille area, use a plain background,
+              keep the page flat and the camera square, and light gently from one side
+              so each raised dot casts a small shadow.
+            </p>
             <UploadPdfNote />
           </Field>
 

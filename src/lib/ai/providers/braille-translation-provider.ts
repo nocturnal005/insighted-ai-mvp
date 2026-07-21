@@ -41,7 +41,13 @@ export interface BrailleTranslationProvider {
  * Run the configured Liblouis CLI (e.g. `lou_translate --backward <table>`), feeding the
  * Braille on stdin. Resolves to null on any failure so the caller degrades gracefully.
  */
-async function runLiblouisCli(command: string, table: string, braille: string, timeoutMs: number): Promise<string | null> {
+async function runLiblouisCli(
+  command: string,
+  table: string,
+  displayTable: string,
+  braille: string,
+  timeoutMs: number,
+): Promise<string | null> {
   let spawn: typeof import("node:child_process").spawn;
   try {
     ({ spawn } = await import("node:child_process"));
@@ -59,7 +65,10 @@ async function runLiblouisCli(command: string, table: string, braille: string, t
 
     let child: import("node:child_process").ChildProcessWithoutNullStreams;
     try {
-      child = spawn(command, ["--backward", table], { stdio: ["pipe", "pipe", "pipe"] });
+      child = spawn(command, ["--backward", "--display-table", displayTable, table], {
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+      });
     } catch {
       done(null);
       return;
@@ -121,7 +130,13 @@ export class LiblouisBackTranslationProvider implements BrailleTranslationProvid
     }
 
     const table = config.table;
-    const out = await runLiblouisCli(config.command, table, input.rawBraille, config.timeoutMs);
+    const out = await runLiblouisCli(
+      config.command,
+      table,
+      config.displayTable,
+      input.rawBraille,
+      config.timeoutMs,
+    );
     if (out === null) {
       return {
         text: "",

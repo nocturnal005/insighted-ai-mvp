@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getStemTask, getTaskAudit, getTaskUpload } from "@/lib/data";
-import { pupilLabel, uploadDataUrl, userName } from "@/lib/store";
+import { pupilLabel, userName } from "@/lib/store";
 import { can } from "@/lib/rbac";
 import { VISUAL_TYPE_LABELS, STRUCTURE_TEMPLATES } from "@/lib/braille-engine";
 import { TaskBadge } from "@/components/ui/badge";
@@ -19,7 +19,13 @@ export default function StemDetailPage({ params }: { params: { id: string } }) {
   const up = getTaskUpload(task.id);
   const timeline = getTaskAudit(task.id);
   const upload = up
-    ? { dataUrl: uploadDataUrl(up), fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
+    ? {
+        src: `/api/source/${encodeURIComponent(task.id)}`,
+        fileName: up.fileName,
+        fileType: up.fileType,
+        uploaderName: userName(up.uploadedBy),
+        createdAt: up.createdAt,
+      }
     : null;
 
   return (

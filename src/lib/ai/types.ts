@@ -14,7 +14,9 @@ export type AiProviderName = "mock" | "openai";
 export type BrailleOcrProviderName =
   | "mock"
   | "openai_vision_draft"
-  | "external_braille_ocr";
+  | "external_braille_ocr"
+  | "abc_braille_web"
+  | "abc_openai_review";
 
 export type ProcessingStatus =
   | "uploaded"
@@ -42,6 +44,8 @@ export type UncertaintyCategory =
   | "line_order_uncertainty"
   | "word_spacing_uncertainty"
   | "subject_specific_term"
+  | "engine_disagreement"
+  | "secondary_review_unavailable"
   | "answer_leak_risk"
   | "trend_revealed"
   | "comparison_revealed"
@@ -87,8 +91,15 @@ export interface BrailleOcrInput {
   title: string;
   fileName?: string;
   mimeType?: string;
+  byteSize?: number;
   dataUrl?: string;
   imageUrl?: string;
+  /**
+   * Whole-page plus lossless, overlapping Braille review crops prepared server-side.
+   * These are supplied only to the secondary vision reviewer; the primary OCR engine
+   * continues to receive one image and remains the source of the draft transcription.
+   */
+  reviewImageUrls?: string[];
   subject?: string | null;
   yearGroup?: string | null;
   /**
@@ -106,13 +117,55 @@ export interface BraillePageResult {
   flags: UncertaintyFlag[];
 }
 
+export type BrailleReviewStatus = "completed" | "skipped" | "unavailable" | "failed";
+
+export type BrailleDiscrepancyType =
+  | "character"
+  | "word"
+  | "contraction"
+  | "number_sign"
+  | "capitalisation"
+  | "punctuation"
+  | "spacing"
+  | "line_order"
+  | "image_quality"
+  | "other";
+
+/** A second-opinion finding. It is evidence for specialist review, never an applied edit. */
+export interface BrailleReviewDiscrepancy {
+  lineNumber: number | null;
+  sourceText: string;
+  suggestedText: string | null;
+  issueType: BrailleDiscrepancyType;
+  reason: string;
+  severity: UncertaintySeverity;
+  confidence: number;
+}
+
+export interface BrailleHybridReview {
+  status: BrailleReviewStatus;
+  summary: string;
+  discrepancies: BrailleReviewDiscrepancy[];
+  rawBraille: string | null;
+  liblouisText: string | null;
+  liblouisAvailable: boolean;
+  /** Exact character agreement between primary OCR and Liblouis, when both exist. */
+  primaryLiblouisAgreement: number | null;
+  reviewImageCount: number;
+  model: string | null;
+  processingMs: number;
+}
+
 export interface BrailleOcrResult {
   draftText: string;
   confidence: number;
+  /** Distinguishes provider scores from evidence-derived consensus and absent scores. */
+  confidenceBasis?: "provider" | "consensus" | "not_supplied";
   flags: UncertaintyFlag[];
   rawBraille?: string | null;
   rawCells?: unknown;
   pageResults?: BraillePageResult[];
+  review?: BrailleHybridReview | null;
   /** Opaque request id, only when an external provider returns one. Never invented. */
   providerRequestId?: string | null;
   meta: AiProcessingMeta;
@@ -143,6 +196,8 @@ export type VisualContext =
 export interface VisualDescriptionInput {
   taskId: string;
   title: string;
+  fileName?: string;
+  mimeType?: string;
   context: VisualContext;
   hintTier?: "tier_0" | "tier_1" | "tier_2";
   subject?: string | null;

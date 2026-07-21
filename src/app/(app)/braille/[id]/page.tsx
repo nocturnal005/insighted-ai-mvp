@@ -3,22 +3,32 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getBrailleTask, getTaskAudit, getTaskUpload } from "@/lib/data";
-import { pupilLabel, uploadDataUrl, userName } from "@/lib/store";
+import { pupilLabel, userName } from "@/lib/store";
 import { can } from "@/lib/rbac";
 import { TaskBadge } from "@/components/ui/badge";
 import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
+import { isPrivateProviderIdentity, redactPrivateBrailleProvenance } from "@/lib/ai/provider-visibility";
 import { ReviewWorkflow } from "./review-workflow";
+import { hydrateBrailleTask } from "@/lib/durable-braille";
 
-export default function BrailleDetailPage({ params }: { params: { id: string } }) {
+export default async function BrailleDetailPage({ params }: { params: { id: string } }) {
   const user = requireUser();
-  const task = getBrailleTask(params.id);
+  const task = (await hydrateBrailleTask(params.id)) ?? getBrailleTask(params.id);
   if (!task) notFound();
 
   const up = getTaskUpload(task.id);
   const timeline = getTaskAudit(task.id);
+  const privateProvenance = isPrivateProviderIdentity(task.transcription?.aiProvider);
+  const taskForDisplay = redactPrivateBrailleProvenance(task);
   const upload = up
-    ? { dataUrl: uploadDataUrl(up), fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
+    ? {
+        src: `/api/source/${encodeURIComponent(task.id)}`,
+        fileName: up.fileName,
+        fileType: up.fileType,
+        uploaderName: userName(up.uploadedBy),
+        createdAt: up.createdAt,
+      }
     : null;
 
   return (
@@ -39,8 +49,9 @@ export default function BrailleDetailPage({ params }: { params: { id: string } }
       </div>
 
       <ReviewWorkflow
-        task={task}
+        task={taskForDisplay}
         upload={upload}
+        privateProvenance={privateProvenance}
         permissions={{
           canEdit: can(user.role, "transcription.edit"),
           canVerify: can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate }),

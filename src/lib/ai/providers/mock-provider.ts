@@ -19,10 +19,12 @@ import { startRun, finishMeta } from "../meta";
 import { PROMPT_VERSIONS } from "../prompts";
 import { effectiveConfidence } from "../confidence";
 import { makeFlag, requiresSpecialistReviewFlag } from "../uncertainty";
-import { assessmentContextFlags } from "../safety";
+import { assessmentContextFlags, isAssessmentContext } from "../safety";
 
 const MODEL = "mock-v1";
 const ENGINE = "mock-v1";
+const VISUAL_MODEL = "demo-fixture-v2";
+const VISUAL_ENGINE = "demo-fixture-v2";
 
 const BRAILLE_SAMPLES: { text: string; flags: { text: string; reason: string; category: UncertaintyFlag["category"] }[]; confidence: number }[] = [
   {
@@ -95,7 +97,7 @@ export async function transcribeBrailleMock(input: BrailleOcrInput): Promise<Bra
   };
 }
 
-export async function describeVisualMock(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
+async function describeLineGraphMock(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
   const timer = startRun();
   await new Promise((r) => setTimeout(r, 200));
 
@@ -124,7 +126,7 @@ export async function describeVisualMock(input: VisualDescriptionInput): Promise
     neutralDescription:
       "The image shows a line graph on a labelled grid. The horizontal axis is titled " +
       "'Time (seconds)' and the vertical axis is titled 'Distance (metres)'. A single line " +
-      "begins at the origin and continues across the grid toward the top right.",
+      "begins at the origin and continues across the grid toward the top right. The line rises steadily before levelling off.",
     visibleElements: ["labelled grid", "single plotted line", "axis titles", "origin marker"],
     labelsDetected: ["Time (seconds)", "Distance (metres)"],
     spatialLayout: "Axes bottom and left; the line runs from lower-left to upper-right.",
@@ -139,6 +141,135 @@ export async function describeVisualMock(input: VisualDescriptionInput): Promise
     }),
     requiresHumanApproval: true,
   };
+}
+
+function demoVisualSearchText(input: VisualDescriptionInput): string {
+  return [input.fileName, input.title, input.subject, input.questionPrompt, input.assessedSkill]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+async function describeDigestiveSystemMock(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
+  const timer = startRun();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  const testsOrganFunctions = /\b(function|functions|role|roles|purpose|explain)\b/i.test(
+    `${input.questionPrompt ?? ""} ${input.assessedSkill ?? ""}`,
+  );
+  const answerSensitiveFlags: UncertaintyFlag[] = [];
+  let neutralDescription =
+    "The image is a labelled front-view diagram of the human digestive system. " +
+    "Labels identify the esophagus, liver, stomach, pancreas, large intestine, small intestine, appendix, rectum and anus. " +
+    "The esophagus runs down from the mouth area to the stomach. The liver is shown above and to the left of the stomach, " +
+    "with the pancreas beside the stomach. The small intestine is coiled in the centre of the abdomen and is surrounded by " +
+    "the large intestine. The appendix is labelled near the lower part of the large intestine, and the rectum and anus are " +
+    "shown at the lower end of the tract.";
+
+  if (isAssessmentContext(input.context) && testsOrganFunctions) {
+    const stomachPhrase = "The stomach breaks down food.";
+    const intestinePhrase = "The small intestine absorbs nutrients.";
+    neutralDescription += ` ${stomachPhrase} ${intestinePhrase}`;
+    answerSensitiveFlags.push(
+      makeFlag({
+        text: stomachPhrase,
+        reason: "Explains an organ function that the learner is being assessed on.",
+        category: "answer_value_revealed",
+        severity: "high",
+      }),
+      makeFlag({
+        text: intestinePhrase,
+        reason: "Supplies a function the learner is expected to explain.",
+        category: "answer_value_revealed",
+        severity: "high",
+      }),
+    );
+  }
+
+  answerSensitiveFlags.push(
+    ...assessmentContextFlags({
+      context: input.context,
+      questionPrompt: input.questionPrompt,
+      assessedSkill: input.assessedSkill,
+    }),
+  );
+
+  return {
+    visualType: "labelled_diagram",
+    neutralDescription,
+    visibleElements: ["human torso outline", "digestive tract", "leader lines", "nine printed organ labels"],
+    labelsDetected: [
+      "Esophagus",
+      "Liver",
+      "Stomach",
+      "Pancreas",
+      "Large intestine",
+      "Small intestine",
+      "Appendix",
+      "Rectum",
+      "Anus",
+    ],
+    spatialLayout: "Front-view torso with labels arranged on both sides and leader lines pointing to organs.",
+    answerSensitiveFlags,
+    confidence: effectiveConfidence(0.94, answerSensitiveFlags),
+    meta: finishMeta(timer, {
+      provider: "demo-fixture",
+      model: VISUAL_MODEL,
+      engineVersion: VISUAL_ENGINE,
+      promptVersion: PROMPT_VERSIONS.mockVisual,
+      mode: "mock",
+    }),
+    requiresHumanApproval: true,
+  };
+}
+
+async function describeUnmatchedVisualMock(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
+  const timer = startRun();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const answerSensitiveFlags: UncertaintyFlag[] = [
+    makeFlag({
+      text: "No matching demo fixture",
+      reason: "Offline demo mode cannot inspect arbitrary images. Use a supported demo fixture or enable the real vision provider.",
+      category: "processing_failed",
+      severity: "high",
+    }),
+    ...assessmentContextFlags({
+      context: input.context,
+      questionPrompt: input.questionPrompt,
+      assessedSkill: input.assessedSkill,
+    }),
+  ];
+
+  return {
+    visualType: "other",
+    neutralDescription:
+      "No image-specific demo description was produced. Review the source visual and complete the description manually, " +
+      "or enable the configured real vision provider.",
+    visibleElements: [],
+    labelsDetected: [],
+    spatialLayout: "",
+    answerSensitiveFlags,
+    confidence: 0,
+    meta: finishMeta(timer, {
+      provider: "demo-fixture",
+      model: VISUAL_MODEL,
+      engineVersion: VISUAL_ENGINE,
+      promptVersion: PROMPT_VERSIONS.mockVisual,
+      mode: "mock",
+    }),
+    requiresHumanApproval: true,
+  };
+}
+
+export async function describeVisualMock(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
+  const searchText = demoVisualSearchText(input);
+  if (/digestive|d[-_ ]?system|oesophagus|esophagus/.test(searchText)) {
+    return describeDigestiveSystemMock(input);
+  }
+  if (/line\s*graph|distance[-/ ]?time|time.*distance|gradient/.test(searchText)) {
+    return describeLineGraphMock(input);
+  }
+  return describeUnmatchedVisualMock(input);
 }
 
 const STRUCTURE_TEMPLATES: Record<StemDescriptionInput["visualType"], string[]> = {

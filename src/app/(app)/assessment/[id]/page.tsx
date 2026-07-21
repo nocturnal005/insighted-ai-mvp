@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/session";
 import { getVisualTask, getTaskAudit, getTaskUpload } from "@/lib/data";
 import { pupilLabel, uploadDataUrl, userName } from "@/lib/store";
 import { can } from "@/lib/rbac";
+import { assessmentContextLabel } from "@/lib/assessment-context";
 import { TaskBadge } from "@/components/ui/badge";
 import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
@@ -17,8 +18,17 @@ export default function VisualDetailPage({ params }: { params: { id: string } })
 
   const up = getTaskUpload(task.id);
   const timeline = getTaskAudit(task.id);
+  const sourceDataUrl = up ? uploadDataUrl(up) : "";
   const upload = up
-    ? { dataUrl: uploadDataUrl(up), fileName: up.fileName, uploaderName: userName(up.uploadedBy), createdAt: up.createdAt }
+    ? {
+        // Demo uploads may live only in the Server Action instance. Inlining the bounded
+        // file keeps the review page functional; production should use object storage.
+        src: sourceDataUrl,
+        fileName: up.fileName,
+        fileType: up.fileType,
+        uploaderName: userName(up.uploadedBy),
+        createdAt: up.createdAt,
+      }
     : null;
 
   return (
@@ -30,7 +40,7 @@ export default function VisualDetailPage({ params }: { params: { id: string } })
         <div>
           <h1 className="text-[24px] font-semibold tracking-tight text-zinc-900">{task.title}</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {task.subject ?? "No subject"} · {task.context === "assessment" ? "Assessment use" : "Lesson use"}
+            {task.subject ?? "No subject"} · {assessmentContextLabel(task.context)}
             {pupilLabel(task.pupilId) ? ` · ${pupilLabel(task.pupilId)}` : ""} · updated {formatRelative(task.updatedAt)}
           </p>
         </div>

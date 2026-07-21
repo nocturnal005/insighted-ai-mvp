@@ -53,6 +53,29 @@ const responseSchema = z.object({
     .optional(),
 });
 
+async function readTextWithLimit(response: Response): Promise<string> {
+  const declaredLength = Number(response.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
+    throw new Error("response too large");
+  }
+
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new Error("response too large");
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks, total).toString("utf8");
+}
+
 function toFlag(f: { text: string; reason: string; category?: string; severity?: string }): UncertaintyFlag {
   const category = (f.category && KNOWN_CATEGORIES.has(f.category) ? f.category : "unclear_braille_cell") as UncertaintyCategory;
   const severity = f.severity === "low" || f.severity === "high" ? f.severity : "medium";
@@ -72,6 +95,7 @@ export async function transcribeBrailleExternal(input: BrailleOcrInput): Promise
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
+    let bodyText: string;
     try {
       res = await fetch(endpoint, {
         method: "POST",
@@ -90,39 +114,28 @@ export async function transcribeBrailleExternal(input: BrailleOcrInput): Promise
         }),
         signal: controller.signal,
       });
+
+      if (!res.ok) {
+        return fallback(timer, [specialistFlag, processingFailedFlag(`status ${res.status}`)]);
+      }
+      bodyText = await readTextWithLimit(res);
     } finally {
       clearTimeout(timeout);
-    }
-
-    if (!res.ok) {
-      return fallback(timer, [specialistFlag, processingFailedFlag(`status ${res.status}`)]);
-    }
-
-    // Response-size protection: reject an oversized body before parsing it.
-    const declaredLength = Number(res.headers.get("content-length") ?? "0");
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
-      return fallback(timer, [specialistFlag, processingFailedFlag("response too large")]);
-    }
-    const bodyText = await res.text();
-    if (bodyText.length > MAX_RESPONSE_BYTES) {
-      return fallback(timer, [specialistFlag, processingFailedFlag("response too large")]);
     }
 
     const parsed = responseSchema.parse(JSON.parse(bodyText));
     const modelFlags = (parsed.flags ?? []).map(toFlag);
 
-    // Optional Liblouis back-translation when the engine returns raw Braille. We record
-    // whether it was available; we do not override the engine's own draftText.
+    // Optional Liblouis back-translation when the engine returns raw Braille. A missing
+    // optional cross-check must not mark the primary OCR provider as unavailable.
     const backTranslationFlags: UncertaintyFlag[] = [];
     if (parsed.rawBraille) {
       const bt = await getBrailleTranslationProvider().backTranslate({ rawBraille: parsed.rawBraille });
-      backTranslationFlags.push(
+      if (bt.available) backTranslationFlags.push(
         makeFlag({
-          text: bt.available ? "Liblouis back-translation available" : "Liblouis back-translation unavailable",
-          reason: bt.available
-            ? "Raw Braille was returned and a Liblouis back-translation ran for cross-checking."
-            : "Raw Braille was returned but Liblouis back-translation is not enabled/configured.",
-          category: bt.available ? "subject_specific_term" : "provider_unavailable",
+          text: "Liblouis back-translation available",
+          reason: "Raw Braille was returned and a Liblouis back-translation ran for cross-checking.",
+          category: "subject_specific_term",
           severity: "low",
         }),
       );

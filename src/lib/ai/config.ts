@@ -11,9 +11,15 @@ import type { AiMode, AiProviderName, BrailleOcrProviderName } from "./types";
 const DEFAULT_VISION_MODEL = "gpt-4.1";
 const DEFAULT_TEXT_MODEL = "gpt-4.1";
 const DEFAULT_MAX_UPLOAD_MB = 10;
+const DEFAULT_OPENAI_TIMEOUT_MS = 60000;
+const DEFAULT_OPENAI_MAX_RETRIES = 1;
 const DEFAULT_ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "application/pdf"];
 const DEFAULT_BRAILLE_OCR_TIMEOUT_MS = 30000;
+const DEFAULT_ABC_BRAILLE_TIMEOUT_MS = 120000;
+const DEFAULT_ABC_BRAILLE_URL = "https://www.abcbraille.com";
+const DEFAULT_ABC_BRAILLE_TABLE = "en-ueb-g2.ctb";
 const DEFAULT_LIBLOUIS_TABLE = "en-ueb-g2.ctb";
+const DEFAULT_LIBLOUIS_DISPLAY_TABLE = "unicode.dis";
 const DEFAULT_LIBLOUIS_TIMEOUT_MS = 5000;
 
 function readEnv(name: string): string | undefined {
@@ -32,12 +38,19 @@ function normaliseProvider(raw: string | undefined): AiProviderName {
 }
 
 function normaliseBrailleProvider(raw: string | undefined): BrailleOcrProviderName {
+  if (!raw) return "abc_braille_web";
   switch (raw) {
     case "openai_vision_draft":
       return "openai_vision_draft";
     case "external_braille_ocr":
       return "external_braille_ocr";
+    case "abc_braille_web":
+      return "abc_braille_web";
+    case "abc_openai_review":
+      return "abc_openai_review";
     default:
+      // A typo must never cause a real-provider upload. Only an unset value defaults to
+      // ABC Braille; an invalid explicit value keeps the original safe mock fallback.
       return "mock";
   }
 }
@@ -45,6 +58,11 @@ function normaliseBrailleProvider(raw: string | undefined): BrailleOcrProviderNa
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+function parseNonNegativeInt(raw: string | undefined, fallback: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
 }
 
 export interface AiConfig {
@@ -71,7 +89,11 @@ export function getAiConfig(): AiConfig {
     visionModel: readEnv("OPENAI_VISION_MODEL") ?? DEFAULT_VISION_MODEL,
     textModel: readEnv("OPENAI_TEXT_MODEL") ?? DEFAULT_TEXT_MODEL,
     hasOpenAiKey: Boolean(readEnv("OPENAI_API_KEY")),
-    hasBrailleEndpoint: Boolean(readEnv("BRAILLE_OCR_ENDPOINT") ?? inAppBrailleEndpoint()),
+    hasBrailleEndpoint:
+      ["abc_braille_web", "abc_openai_review"].includes(
+        normaliseBrailleProvider(readEnv("BRAILLE_OCR_PROVIDER")),
+      ) ||
+      Boolean(readEnv("BRAILLE_OCR_ENDPOINT") ?? inAppBrailleEndpoint()),
     allowRealPupilData: readEnv("ALLOW_REAL_PUPIL_DATA") === "true",
   };
 }
@@ -85,6 +107,14 @@ export function isRealAiEnabled(): boolean {
 /** Server-only secret access. Never expose the return value to the client. */
 export function getOpenAiKey(): string | undefined {
   return readEnv("OPENAI_API_KEY");
+}
+
+/** Bound provider latency so an interactive action cannot inherit SDK-scale waits. */
+export function getOpenAiRequestConfig(): { timeoutMs: number; maxRetries: number } {
+  return {
+    timeoutMs: parsePositiveInt(readEnv("OPENAI_TIMEOUT_MS"), DEFAULT_OPENAI_TIMEOUT_MS),
+    maxRetries: parseNonNegativeInt(readEnv("OPENAI_MAX_RETRIES"), DEFAULT_OPENAI_MAX_RETRIES),
+  };
 }
 
 /**
@@ -110,10 +140,32 @@ export function getBrailleEndpointConfig(): { endpoint?: string; apiKey?: string
   };
 }
 
+function normaliseAbcBrailleBaseUrl(raw: string | undefined): string {
+  const candidate = raw ?? DEFAULT_ABC_BRAILLE_URL;
+  try {
+    const url = new URL(candidate);
+    const loopback = url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1";
+    if (url.protocol !== "https:" && !(loopback && url.protocol === "http:")) return DEFAULT_ABC_BRAILLE_URL;
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return DEFAULT_ABC_BRAILLE_URL;
+  }
+}
+
+/** Server-only configuration for the ABC Braille web image-to-text workflow. */
+export function getAbcBrailleConfig(): { baseUrl: string; languageTable: string; timeoutMs: number } {
+  return {
+    baseUrl: normaliseAbcBrailleBaseUrl(readEnv("ABC_BRAILLE_BASE_URL")),
+    languageTable: readEnv("ABC_BRAILLE_LANGUAGE_TABLE") ?? DEFAULT_ABC_BRAILLE_TABLE,
+    timeoutMs: parsePositiveInt(readEnv("ABC_BRAILLE_TIMEOUT_MS"), DEFAULT_ABC_BRAILLE_TIMEOUT_MS),
+  };
+}
+
 export interface LiblouisConfig {
   enabled: boolean;
   command: string | undefined;
   table: string;
+  displayTable: string;
   timeoutMs: number;
 }
 
@@ -126,6 +178,7 @@ export function getLiblouisConfig(): LiblouisConfig {
     enabled: readEnv("LIBLOUIS_ENABLED") === "true",
     command: readEnv("LIBLOUIS_COMMAND"),
     table: readEnv("LIBLOUIS_TABLE") ?? DEFAULT_LIBLOUIS_TABLE,
+    displayTable: readEnv("LIBLOUIS_DISPLAY_TABLE") ?? DEFAULT_LIBLOUIS_DISPLAY_TABLE,
     timeoutMs: parsePositiveInt(readEnv("LIBLOUIS_TIMEOUT_MS"), DEFAULT_LIBLOUIS_TIMEOUT_MS),
   };
 }

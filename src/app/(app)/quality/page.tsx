@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { getCorrections, getEvalSamples, getQualityStats } from "@/lib/data";
 import { getAiConfig } from "@/lib/ai";
+import { isPrivateProviderIdentity } from "@/lib/ai/provider-visibility";
 import { pct } from "@/lib/metrics";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
@@ -32,10 +33,8 @@ export default function QualityPage() {
         <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" />
         {ai.mode === "real" ? (
           <span>
-            AI mode: <span className="font-medium">real</span>. Braille OCR provider{" "}
-            <span className="font-medium">{ai.brailleOcrProvider}</span> (model {ai.visionModel}). Samples
-            with an image are scored against this provider; text-only samples fall back to labelled mock
-            simulation.
+            AI mode: <span className="font-medium">real</span>. Samples with an image are scored by the
+            configured OCR service; text-only samples fall back to labelled mock simulation.
           </span>
         ) : (
           <span>
@@ -71,7 +70,6 @@ export default function QualityPage() {
             <Metric label="Average CER" value={pct(stats.evalAvgCer)} />
             <Metric label="Average WER" value={pct(stats.evalAvgWer)} />
             <Metric label="Average confidence" value={stats.evalAvgConfidence == null ? "—" : `${Math.round(stats.evalAvgConfidence * 100)}%`} />
-            <Metric label="By provider" value={stats.byProvider.map((p) => `${p.key}: ${p.count}`).join(", ") || "—"} />
             <Metric label="By Braille type" value={stats.byBrailleType.map((b) => `${b.key}: ${b.count}`).join(", ") || "—"} />
             <Metric label="Common flags" value={stats.topFlagCategories.map((f) => `${f.key} (${f.count})`).join(", ") || "—"} />
           </CardBody>
@@ -80,9 +78,9 @@ export default function QualityPage() {
 
       {/* Evaluation harness */}
       <Card className="mb-6">
-        <CardHeader>
+        <CardHeader className="flex-wrap">
           <CardTitle>Evaluation harness</CardTitle>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <Link href="/quality/new" className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50">
               <Plus className="h-3.5 w-3.5" /> Add sample
             </Link>
@@ -100,7 +98,8 @@ export default function QualityPage() {
               <p className="mt-3 text-sm text-zinc-500">No ground-truth samples yet. Add labelled images to measure accuracy.</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="min-w-[620px] w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-100 text-left">
                   <th className="px-5 py-3 eyebrow font-semibold">Sample</th>
@@ -135,7 +134,11 @@ export default function QualityPage() {
                       {s.lastRunAt && (
                         <p className="mt-0.5 text-[11px] text-zinc-400">
                           Run {formatRelative(s.lastRunAt)}
-                          {s.provider ? ` · ${s.aiMode ?? "?"} · ${s.provider}/${s.model ?? "?"}` : ""}
+                          {s.provider
+                            ? isPrivateProviderIdentity(s.provider)
+                              ? ` · ${s.aiMode ?? "?"} · live transcription`
+                              : ` · ${s.aiMode ?? "?"} · ${s.provider}/${s.model ?? "?"}`
+                            : ""}
                           {s.confidence != null ? ` · ${Math.round(s.confidence * 100)}% conf` : ""}
                         </p>
                       )}
@@ -161,6 +164,7 @@ export default function QualityPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </CardBody>
       </Card>
@@ -175,7 +179,8 @@ export default function QualityPage() {
           {corrections.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-zinc-500">No corrections captured yet.</p>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="min-w-[520px] w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-100 text-left">
                   <th className="px-5 py-3 eyebrow font-semibold">Task</th>
@@ -198,6 +203,7 @@ export default function QualityPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           <p className="border-t border-zinc-100 px-5 py-3 text-xs text-zinc-400">
             These (AI draft → verified final) pairs are exactly the labelled data needed to evaluate and

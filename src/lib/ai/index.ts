@@ -18,6 +18,7 @@ import type {
 } from "./types";
 import { getAiConfig } from "./config";
 import { preprocessImage } from "./preprocessing";
+import { preprocessBrailleImage } from "./braille-preprocessing";
 import { finishMeta, startRun } from "./meta";
 import { realPupilDataBlockedFlag, requiresSpecialistReviewFlag } from "./uncertainty";
 import { describeStemMock, describeVisualMock, transcribeBrailleMock } from "./providers/mock-provider";
@@ -27,6 +28,8 @@ import {
   transcribeBrailleWithOpenAIDraft,
 } from "./providers/openai-vision-provider";
 import { transcribeBrailleExternal } from "./providers/external-braille-provider";
+import { transcribeBrailleWithAbc } from "./providers/abc-braille-provider";
+import { transcribeBrailleWithHybridReview } from "./providers/hybrid-braille-provider";
 
 import { assertRealAiDataAllowed, sanitizeProviderText } from "./safety";
 
@@ -59,6 +62,14 @@ function pupilSafetyFlags(hasLinkedPupil: boolean | undefined, objectLabel: stri
 function realPupilBlockActive(hasLinkedPupil?: boolean): boolean {
   const c = getAiConfig();
   return c.mode === "real" && Boolean(hasLinkedPupil) && !c.allowRealPupilData;
+}
+
+function realBraillePupilBlockActive(hasLinkedPupil?: boolean): boolean {
+  const c = getAiConfig();
+  const usesRealProvider =
+    c.brailleOcrProvider === "abc_braille_web" ||
+    (c.mode === "real" && c.brailleOcrProvider !== "mock");
+  return usesRealProvider && Boolean(hasLinkedPupil) && !c.allowRealPupilData;
 }
 
 /** Provenance stamp for a blocked run — records that no real provider was called. */
@@ -114,6 +125,7 @@ function sanitizeVisualInput<T extends VisualDescriptionInput>(input: T): T {
   return {
     ...input,
     title: sanitizeProviderText(input.title) ?? "",
+    fileName: input.fileName ? sanitizeProviderText(input.fileName) ?? undefined : undefined,
     subject: sanitizeProviderText(input.subject),
     yearGroup: sanitizeProviderText(input.yearGroup),
     questionPrompt: sanitizeProviderText(input.questionPrompt),
@@ -148,21 +160,34 @@ async function prepare(input: { dataUrl?: string; imageUrl?: string; mimeType?: 
 
 /**
  * Braille OCR. In mock mode always uses the deterministic mock. In real mode dispatches by
- * `BRAILLE_OCR_PROVIDER`: openai_vision_draft (non-specialist draft) or external_braille_ocr.
+ * `BRAILLE_OCR_PROVIDER`: abc_openai_review (recommended), abc_braille_web,
+ * openai_vision_draft (non-specialist draft), external_braille_ocr, or explicit mock.
  * Output ALWAYS requires specialist verification.
  */
 export async function transcribeBraille(input: BrailleOcrInput): Promise<BrailleOcrResult> {
   const config = getAiConfig();
 
-  // Preflight block: pupil-linked + real mode + not approved → never reach a real provider.
-  if (realPupilBlockActive(input.hasLinkedPupil)) return blockedBrailleResult();
+  // Mock mode is deliberately offline and deterministic. Return before image
+  // preprocessing so a demo does not decode/re-encode a multi-megabyte upload or
+  // accidentally call an external OCR workflow configured for production.
+  if (config.mode === "mock") return transcribeBrailleMock(input);
 
-  const { dataUrl, imageUrl, warnings } = await prepare(input);
-  const routed = { ...input, dataUrl, imageUrl };
+  // Preflight block: pupil-linked + real mode + not approved → never reach a real provider.
+  if (realBraillePupilBlockActive(input.hasLinkedPupil)) return blockedBrailleResult();
+
+  const { dataUrl, imageUrl, reviewImageUrls, warnings } = await preprocessBrailleImage({
+    dataUrl: input.dataUrl,
+    imageUrl: input.imageUrl,
+    mimeType: input.mimeType,
+    byteSize: input.byteSize,
+  });
+  const routed = { ...input, dataUrl, imageUrl, reviewImageUrls };
 
   let result: BrailleOcrResult;
-  if (config.mode === "mock") {
-    result = await transcribeBrailleMock(routed);
+  if (config.brailleOcrProvider === "abc_openai_review") {
+    result = await transcribeBrailleWithHybridReview(sanitizeBrailleInput(routed));
+  } else if (config.brailleOcrProvider === "abc_braille_web") {
+    result = await transcribeBrailleWithAbc(sanitizeBrailleInput(routed));
   } else if (config.brailleOcrProvider === "openai_vision_draft") {
     result = await transcribeBrailleWithOpenAIDraft(sanitizeBrailleInput(routed));
   } else if (config.brailleOcrProvider === "external_braille_ocr") {
@@ -192,13 +217,13 @@ function shouldUseRealOpenAi(): boolean {
  * never a silent downgrade to mock). Mock mode stays fully offline.
  */
 export async function describeVisual(input: VisualDescriptionInput): Promise<VisualDescriptionResult> {
+  // Mock output uses task metadata only, so pixel preprocessing is wasted work.
+  if (!shouldUseRealOpenAi()) return describeVisualMock(input);
   if (realPupilBlockActive(input.hasLinkedPupil)) return blockedVisualResult();
 
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
-  const result = shouldUseRealOpenAi()
-    ? await describeVisualWithOpenAI(sanitizeVisualInput(routed))
-    : await describeVisualMock(routed);
+  const result = await describeVisualWithOpenAI(sanitizeVisualInput(routed));
   const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
   return {
     ...result,
@@ -209,13 +234,12 @@ export async function describeVisual(input: VisualDescriptionInput): Promise<Vis
 
 /** STEM structured description. Real OpenAI in real mode (self-handling missing config), else mock. */
 export async function describeStemVisual(input: StemDescriptionInput): Promise<StemDescriptionResult> {
+  if (!shouldUseRealOpenAi()) return describeStemMock(input);
   if (realPupilBlockActive(input.hasLinkedPupil)) return blockedStemResult();
 
   const { dataUrl, imageUrl, warnings } = await prepare(input);
   const routed = { ...input, dataUrl, imageUrl };
-  const result = shouldUseRealOpenAi()
-    ? await describeStemWithOpenAI(sanitizeVisualInput(routed))
-    : await describeStemMock(routed);
+  const result = await describeStemWithOpenAI(sanitizeVisualInput(routed));
   const pupilFlags = pupilSafetyFlags(input.hasLinkedPupil, input.title);
   return {
     ...result,

@@ -4,6 +4,7 @@ import { can } from "@/lib/rbac";
 import { buildExport, isExportKind } from "@/lib/export-content";
 import { markExported } from "@/lib/export-record";
 import { PrintActions } from "./print-actions";
+import { hydrateBrailleTask } from "@/lib/durable-braille";
 
 // Reads the demo session and stamps an export (audit side effect) — always per-request.
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
  * Print-optimised export view. Opening it stamps the record as exported (audit) and the
  * user saves it as PDF via the browser print dialog — zero-dependency "PDF export".
  */
-export default function PrintPage({
+export default async function PrintPage({
   params,
   searchParams,
 }: {
@@ -22,6 +23,7 @@ export default function PrintPage({
   const user = requireUser();
   const kind = searchParams.kind;
   if (!isExportKind(kind) || !can(user.role, "export")) notFound();
+  if (kind === "transcription" || kind === "feedback") await hydrateBrailleTask(params.id);
 
   const { doc, error } = buildExport(kind, params.id);
   if (error || !doc) {
@@ -33,7 +35,7 @@ export default function PrintPage({
     );
   }
 
-  markExported(kind, params.id, user, doc.title, false);
+  await markExported(kind, params.id, user, doc.title, false);
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10 print:py-0">
