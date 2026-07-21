@@ -75,22 +75,22 @@ const WORKSPACE_CARDS: WorkspaceCard[] = [
 
 function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#002147] px-4 py-4 shadow-sm sm:px-6">
-      <div className="mx-auto flex max-w-6xl items-center justify-between">
-        <span className="font-display text-xl font-bold tracking-tight text-white">InsightEd AI</span>
+    <header className="relative z-20 flex h-[77px] w-full items-center border-b border-white/10 bg-[#071d42] px-6 sm:px-[30px]">
+      <div className="flex w-full items-center justify-between">
+        <span className="font-display text-[22px] font-bold tracking-[-0.03em] text-white sm:text-[26px]">InsightEd AI</span>
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 rounded-full border border-white/20 bg-black/20 px-3 py-1 sm:flex">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#9af6b5] opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#9af6b5]" />
+          <div className="hidden h-8 items-center gap-2.5 rounded-full border border-white/20 bg-[#061a39] px-3.5 shadow-sm sm:flex">
+            <span className="relative flex h-2 w-2" aria-hidden="true">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#8ff1bb] opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#8ff1bb]" />
             </span>
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-white">System Status: Online</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">System Status: Online</span>
           </div>
           <a
             href="#profiles"
-            className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+            className="flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-white/15 focus-visible:ring-[#8ff1bb] focus-visible:ring-offset-[#071d42] sm:min-h-[45px]"
           >
-            <UserIcon className="h-4 w-4" aria-hidden="true" />
+            <UserIcon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={2} />
             Login
           </a>
         </div>
@@ -101,34 +101,50 @@ function SiteHeader() {
 
 function Hero() {
   return (
-    <section className="flex w-full flex-col overflow-hidden bg-[#002147] lg:flex-row">
-      <div className="flex flex-col justify-center p-8 text-left lg:w-1/2 lg:p-16">
-        <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-[#9af6b5]">Welcome Back</p>
-        <h1 className="font-display mb-6 text-4xl font-bold leading-tight text-white lg:text-5xl">
-          Secure Accessibility Workflow
-        </h1>
-        <p className="font-hyperlegible mb-8 max-w-lg text-lg leading-relaxed text-[#aec7f6]">
-          Secure, human-verified accessibility workflow for VI education teams. Select your workspace to continue.
-        </p>
-        <div>
+    <section
+      aria-labelledby="hero-title"
+      className="relative flex min-h-[calc(100svh-77px)] w-full flex-col overflow-hidden bg-[#071d42] lg:flex-row"
+    >
+      <div className="relative flex min-h-[620px] flex-col justify-center overflow-hidden px-6 py-16 text-left sm:px-10 lg:min-h-[calc(100svh-77px)] lg:w-1/2 lg:px-20">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-60"
+          aria-hidden="true"
+          style={{
+            background:
+              "radial-gradient(circle at 14% 88%, rgba(55, 95, 155, 0.16), transparent 38%), radial-gradient(circle at 80% 10%, rgba(71, 106, 156, 0.10), transparent 34%)",
+          }}
+        />
+        <div className="relative z-10 max-w-[535px] lg:-translate-y-6">
+          <p className="mb-5 text-xs font-bold uppercase tracking-[0.12em] text-[#8ff1bb] sm:text-[14px]">Welcome Back</p>
+          <h1
+            id="hero-title"
+            className="font-display mb-8 text-[3.25rem] font-bold leading-[0.92] tracking-[-0.045em] text-white sm:text-[4rem] lg:text-[clamp(3.75rem,4.7vw,4.05rem)]"
+          >
+            <span className="block">Secure</span>
+            <span className="block">Accessibility</span>
+            <span className="block">Workflow</span>
+          </h1>
+          <p className="font-hyperlegible mb-10 max-w-[510px] text-base leading-7 text-[#bdc9df] sm:text-[18px] sm:leading-9">
+            <span className="lg:block">Secure, human-verified accessibility workflow for VI</span>{" "}
+            <span className="lg:block">education teams. Select your workspace to continue.</span>
+          </p>
           <a
             href="#profiles"
-            className="inline-block rounded-lg bg-[#d6e3ff] px-8 py-4 text-sm font-semibold text-[#000a1e] transition-colors hover:bg-white"
+            className="inline-flex min-h-16 min-w-[167px] items-center justify-center rounded-[8px] bg-[#e2e9fb] px-8 py-3 text-base font-semibold text-[#07172f] shadow-[0_8px_24px_rgba(0,0,0,0.10)] transition hover:-translate-y-0.5 hover:bg-white focus-visible:ring-[#8ff1bb] focus-visible:ring-offset-[#071d42]"
           >
             Get Started
           </a>
         </div>
       </div>
-      <div className="relative min-h-[320px] lg:min-h-[560px] lg:w-1/2">
+      <div className="relative min-h-[520px] lg:min-h-[calc(100svh-77px)] lg:w-1/2">
         <Image
-          src="/hero-classroom.jpg"
-          alt="A Teaching Assistant supporting a secondary-school student who is writing with a braille typewriter in a bright classroom."
+          src="/hero-classroom-stitch.png"
+          alt="A visually impaired student using a braille typewriter while classmates work with accessible technology."
           fill
           priority
           sizes="(max-width: 1024px) 100vw, 50vw"
-          className="object-cover"
+          className="object-cover object-center"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#002147]/40 to-transparent lg:from-[#002147]/20" />
       </div>
     </section>
   );
@@ -232,8 +248,8 @@ function SiteFooter() {
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[#eef4ff]">
-      <SiteHeader />
       <main id="main" className="w-full flex-grow">
+        <SiteHeader />
         <Hero />
         <section id="profiles" className="bg-[#eef4ff] px-6 py-16">
           <div className="mx-auto max-w-6xl">
