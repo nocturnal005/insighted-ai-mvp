@@ -124,9 +124,9 @@ function Hero() {
             <span className="block">Accessibility</span>
             <span className="block">Workflow</span>
           </h1>
-          <p className="font-hyperlegible mb-10 max-w-[510px] text-base leading-7 text-[#bdc9df] sm:text-[18px] sm:leading-9">
-            <span className="lg:block">Secure, human-verified accessibility workflow for VI</span>{" "}
-            <span className="lg:block">education teams. Select your workspace to continue.</span>
+          <p className="font-hyperlegible mb-10 max-w-[510px] text-left text-base leading-[1.55] text-[#bdc9df] [text-align-last:left] [text-wrap:pretty] sm:text-[18px] md:text-justify">
+            Secure, human-verified accessibility workflow for <span className="whitespace-nowrap">VI education</span>{" "}
+            teams. Select your workspace to continue.
           </p>
           <a
             href="#profiles"
