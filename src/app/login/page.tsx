@@ -14,6 +14,7 @@ import {
 import { DEMO_MODE, demoUsers } from "@/lib/session";
 import type { User, UserRole } from "@/lib/types";
 import { signInAs } from "./actions";
+import { WorkspaceSubmitButton } from "./workspace-submit-button";
 
 /**
  * Public front page. Presents the product and lets a visitor enter a role-specific
@@ -164,12 +165,9 @@ function WorkspaceGrid({ users }: { users: User[] }) {
           <form key={card.title} action={signInAs} className="h-full">
             <input type="hidden" name="userId" value={card.user.id} />
             {card.redirectTo && <input type="hidden" name="next" value={card.redirectTo} />}
-            <button
-              type="submit"
-              aria-label={`Enter the ${card.title} workspace`}
-              className={`group flex h-full w-full flex-col rounded-2xl border border-[#c4c6cf] p-6 text-left transition-all hover:-translate-y-1 hover:shadow-card ${
-                card.highlight ? "bg-[#e5eeff]" : "bg-[#f8f9ff]"
-              }`}
+            <WorkspaceSubmitButton
+              ariaLabel={`Enter the ${card.title} workspace`}
+              highlight={Boolean(card.highlight)}
             >
               <div className="mb-4">
                 <Icon className="mb-4 h-8 w-8 text-[#002147]" aria-hidden="true" strokeWidth={1.75} />
@@ -180,7 +178,7 @@ function WorkspaceGrid({ users }: { users: User[] }) {
                 <span>Enter Workspace</span>
                 <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
               </div>
-            </button>
+            </WorkspaceSubmitButton>
           </form>
         );
       })}
