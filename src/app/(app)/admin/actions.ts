@@ -7,7 +7,7 @@ import { db, purgeExpiredUploads, recordAudit, persistDb } from "@/lib/store";
 import type { UserRole } from "@/lib/types";
 
 export async function setUserRole(formData: FormData) {
-  const actor = requireUser();
+  const actor = await requireUser();
   if (!can(actor.role, "org.manage")) throw new Error("Not permitted");
 
   const userId = String(formData.get("userId"));
@@ -46,7 +46,7 @@ export async function setUserRole(formData: FormData) {
  * Accepts an explicit `brailleLiterate` ("true"/"false") or toggles when absent.
  */
 export async function setBrailleLiterate(formData: FormData) {
-  const actor = requireUser();
+  const actor = await requireUser();
   if (!can(actor.role, "org.manage")) throw new Error("Not permitted");
 
   const userId = String(formData.get("userId"));
@@ -77,7 +77,7 @@ export async function setBrailleLiterate(formData: FormData) {
 }
 
 export async function setRetention(formData: FormData) {
-  const actor = requireUser();
+  const actor = await requireUser();
   if (!can(actor.role, "org.manage")) throw new Error("Not permitted");
 
   const days = Number(formData.get("retentionDays"));
@@ -89,7 +89,7 @@ export async function setRetention(formData: FormData) {
 }
 
 export async function secureDeleteExpiredMaterial() {
-  const actor = requireUser();
+  const actor = await requireUser();
   if (!can(actor.role, "org.manage")) throw new Error("Not permitted");
 
   const deleted = purgeExpiredUploads(db.settings.retentionDays);

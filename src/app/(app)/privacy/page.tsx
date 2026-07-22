@@ -12,8 +12,8 @@ const SECTIONS = [
   ["Your rights", "Schools may request access, correction, or deletion of records at any time. [Add contact route.]"],
 ];
 
-export default function PrivacyPage() {
-  requireUser();
+export default async function PrivacyPage() {
+  await requireUser();
   return (
     <div className="max-w-3xl">
       <PageHeader title="Privacy Notice" description="Draft — placeholder content to be completed with your DPO before launch." />

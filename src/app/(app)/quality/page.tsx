@@ -12,8 +12,8 @@ import { PageHeader } from "@/components/page-header";
 import { formatRelative } from "@/lib/utils";
 import { runEvaluation, deleteEvalSample } from "./actions";
 
-export default function QualityPage() {
-  const user = requireUser();
+export default async function QualityPage() {
+  const user = await requireUser();
   if (!can(user.role, "audit.read")) redirect("/dashboard");
 
   const stats = getQualityStats();

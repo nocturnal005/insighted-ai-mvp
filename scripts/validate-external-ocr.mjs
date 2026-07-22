@@ -24,7 +24,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import http from "node:http";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -49,8 +49,6 @@ const DRAFT_WARNING =
   "This draft transcription must be checked by a QTVI or Braille-literate specialist before teacher feedback or export.";
 const MANUAL_TRANSCRIPTION_WARNING =
   "OCR did not produce a dependable starting point from this capture.";
-const GATE_HINT = "Teacher feedback &amp; export unlock after specialist verification";
-
 // 106x64 synthetic Braille PNG (generated test asset — not pupil work).
 const SYNTHETIC_PNG_B64 =
   "iVBORw0KGgoAAAANSUhEUgAAAaoAAACACAAAAAB/pHLOAAAB/0lEQVR4nO3asW6DMBRA0bjq//8yHaouTQbcuIQbzlk6gNBDVzjFYmw3Gj5ePQB7SZUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVYZUGVJlSJUhVcbn5PnjdtvOd3S/++scM/OC+cfUBcb3n+1cR/e7v84xMy+Z3wKYMZVq/Pp7jqP73V/nmJnXzO+pypDqPVP9/Cxupzq63/11jpl5zfyeqoy5f9a9V2Xeq3ghC2CGVJfYA5zdH1u1yzcm1/1VM8/e0d/O/Ic9wNn9sVW7fGP3mWtnnr2jZ2Z+yAL4/nuAs/tjq3b5xu4z1848e0fPzPyYpypDqvffA5zdH1u1y7ftPnPtzLN39MzMj3mqLrEH6L1qnPe9iheyAGZI9bZ7gM+42neAix33W3W17wCXswBmHJbqat8BruepypAq47BUV/sOcD1PVcaRG0tneIMZ3qv4dxbADKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKkypMqQKkOqDKluFV8ot6Xzb1ofUQAAAABJRU5ErkJggg==";
@@ -242,13 +240,19 @@ class Session {
 
 /** Braille server-action ids from the dev-compiled module (name -> id). */
 function brailleActionIds() {
-  const compiled = readFileSync(path.join(ROOT, ".next", "server", "app", "(app)", "braille", "new", "page.js"), "utf8");
-  for (const match of compiled.matchAll(/__next_internal_action_entry_do_not_use__ \{([^}]+)\}/g)) {
-    if (match[1].includes("runTranscription")) {
-      const ids = {};
-      for (const pair of match[1].matchAll(/\\?"([a-f0-9]{40})\\?":\\?"(\w+)\\?"/g)) ids[pair[2]] = pair[1];
-      return ids;
+  for (const manifestPath of [
+    path.join(ROOT, ".next", "dev", "server", "server-reference-manifest.json"),
+    path.join(ROOT, ".next", "server", "server-reference-manifest.json"),
+  ]) {
+    if (!existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const ids = {};
+    for (const [actionId, entry] of Object.entries(manifest.node ?? {})) {
+      if (String(entry.filename).replaceAll("\\", "/").endsWith("src/app/(app)/braille/actions.ts")) {
+        ids[entry.exportedName] = actionId;
+      }
     }
+    if (ids.runTranscription) return ids;
   }
   throw new Error("braille action ids not found (route not compiled?)");
 }
@@ -277,9 +281,14 @@ async function main() {
     const taskId = taskPath.split("/").pop();
     check("task created with synthetic image, no pupil linked", true, taskPath);
 
+    // Compile the dynamic detail route before reading its per-route action manifest.
+    await (await ta.get(taskPath)).text();
     const ids = brailleActionIds();
     const runResponse = await ta.invoke(taskPath, ids.runTranscription, [taskId]);
-    check("runTranscription dispatched", runResponse.status === 200, `status=${runResponse.status}`);
+    const runDetail = runResponse.status === 200
+      ? `status=${runResponse.status}`
+      : `status=${runResponse.status}; action-not-found=${runResponse.headers.get("x-nextjs-action-not-found")}; body=${(await runResponse.clone().text()).slice(0, 180)}`;
+    check("runTranscription dispatched", runResponse.status === 200, runDetail);
 
     const engineRequest = mockRequests.at(-1);
     check("adapter called the configured endpoint", Boolean(engineRequest));

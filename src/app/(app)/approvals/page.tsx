@@ -7,8 +7,8 @@ import { PageHeader } from "@/components/page-header";
 
 const KIND_ICON = { braille: ScanText, visual: ImageIcon, stem: Layers } as const;
 
-export default function ApprovalsPage() {
-  requireUser();
+export default async function ApprovalsPage() {
+  await requireUser();
   const items = getApprovalQueue();
 
   return (

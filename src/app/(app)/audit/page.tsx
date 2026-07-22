@@ -42,8 +42,8 @@ const ACTION_LABEL: Record<string, string> = {
   "eval.run": "ran an evaluation",
 };
 
-export default function AuditPage() {
-  const user = requireUser();
+export default async function AuditPage() {
+  const user = await requireUser();
   if (!can(user.role, "audit.read")) redirect("/dashboard");
 
   const entries = getAudit();

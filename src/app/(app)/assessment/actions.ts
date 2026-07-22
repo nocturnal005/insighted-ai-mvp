@@ -12,7 +12,7 @@ import { hasCompleteAssessmentContext, isAssessmentLikeContext, parseAssessmentC
 import type { HintTier, VisualDescriptionTask } from "@/lib/types";
 
 export async function createVisualTask(formData: FormData) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "task.create")) throw new Error("Not permitted");
 
   const title = String(formData.get("title") || "").trim();
@@ -29,6 +29,7 @@ export async function createVisualTask(formData: FormData) {
   if (!hasCompleteAssessmentContext(context, questionPrompt, assessedSkill)) {
     throw new Error("Question prompt and assessed skill are required for assessment use");
   }
+  const uploadBuffer = Buffer.from(await file.arrayBuffer());
 
   const now = new Date().toISOString();
   const task: VisualDescriptionTask = {
@@ -48,15 +49,11 @@ export async function createVisualTask(formData: FormData) {
   db.visualTasks.unshift(task);
 
   // Store the upload (if any) and capture its bytes to feed the vision provider.
-  let dataUrl: string | undefined;
-  if (file && file.size > 0) {
-    const buf = Buffer.from(await file.arrayBuffer());
-    task.uploadId = createUpload({
-      taskId: task.id, module: "visual", fileName: file.name, fileType: file.type,
-      byteSize: file.size, data: buf, uploadedBy: user,
-    });
-    dataUrl = `data:${file.type};base64,${buf.toString("base64")}`;
-  }
+  task.uploadId = createUpload({
+    taskId: task.id, module: "visual", fileName: file.name, fileType: file.type,
+    byteSize: file.size, data: uploadBuffer, uploadedBy: user,
+  });
+  const dataUrl = `data:${file.type};base64,${uploadBuffer.toString("base64")}`;
 
   // Generate the neutral, assessment-safe description from the image + assessment context.
   await generateVisualDescription(user, task, dataUrl);
@@ -70,7 +67,7 @@ export async function createVisualTask(formData: FormData) {
  * provider (title/subject/year group/prompt/skill/image) plus a boolean pupil-link.
  */
 async function generateVisualDescription(
-  user: ReturnType<typeof requireUser>,
+  user: Awaited<ReturnType<typeof requireUser>>,
   task: VisualDescriptionTask,
   dataUrl: string | undefined,
   reason?: string,
@@ -130,7 +127,7 @@ async function generateVisualDescription(
  * against the new context. Blocked once approved.
  */
 export async function updateVisualContext(taskId: string, formData: FormData) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
   const task = getVisualTask(taskId);
   if (!task) throw new Error("Not found");
@@ -166,7 +163,7 @@ export async function updateVisualContext(taskId: string, formData: FormData) {
 
 /** Explicitly re-run the visual description from the stored upload. Blocked once approved. */
 export async function rerunVisualDescription(taskId: string) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
   const task = getVisualTask(taskId);
   if (!task) throw new Error("Not found");
@@ -181,7 +178,7 @@ export async function rerunVisualDescription(taskId: string) {
 }
 
 export async function updateVisual(taskId: string, editedDescription: string, hintTier: HintTier) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
   const task = getVisualTask(taskId);
   if (!task) throw new Error("Not found");
@@ -203,7 +200,7 @@ export async function updateVisual(taskId: string, editedDescription: string, hi
 }
 
 export async function approveVisual(taskId: string, editedDescription?: string, hintTier?: HintTier) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "visual.approve")) throw new Error("Only a teacher or QTVI can approve");
   const task = getVisualTask(taskId);
   if (!task) throw new Error("Not found");
@@ -240,7 +237,7 @@ export async function approveVisual(taskId: string, editedDescription?: string, 
 }
 
 export async function rejectVisual(taskId: string, reason: string) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "task.reject")) throw new Error("Not permitted");
   const task = getVisualTask(taskId);
   if (!task) throw new Error("Not found");

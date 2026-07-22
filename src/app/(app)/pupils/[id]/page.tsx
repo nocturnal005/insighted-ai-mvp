@@ -9,8 +9,9 @@ import { TaskBadge } from "@/components/ui/badge";
 import { formatRelative } from "@/lib/utils";
 import type { TaskStatus } from "@/lib/types";
 
-export default function PupilDetailPage({ params }: { params: { id: string } }) {
-  requireUser();
+export default async function PupilDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  await requireUser();
   const pupil = getPupil(params.id);
   if (!pupil) notFound();
   const work = getPupilWork(pupil.id);

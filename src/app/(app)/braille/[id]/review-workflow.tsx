@@ -66,20 +66,37 @@ export function ReviewWorkflow({
   const [reason, setReason] = useState("");
   const [pending, start] = useTransition();
   const [action, setAction] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Effective values: local edit if present (?? preserves an intentionally-cleared ""),
   // otherwise the latest server value — so freshly generated drafts appear without a reload.
   const transcriptValue = text ?? t?.editedText ?? "";
   const commentsValue = comments ?? fb?.teacherComments ?? "";
   const learnerValue = learner ?? fb?.learnerSummary ?? "";
+  const feedbackApprovalBlocked = !commentsValue.trim() || !learnerValue.trim();
 
   function run(name: string, fn: () => Promise<void>) {
+    setError(null);
     setAction(name);
-    start(async () => { await fn(); setAction(null); });
+    start(async () => {
+      try {
+        await fn();
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "The action could not be completed");
+      } finally {
+        setAction(null);
+      }
+    });
   }
 
   return (
     <div className="space-y-5">
+      {error && (
+        <div role="alert" className="flex items-start gap-2.5 rounded-xl bg-critical-50 px-4 py-3 text-sm text-critical-700">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
       <WorkflowStages task={task} hasUpload={Boolean(upload)} />
 
       {task.status === "rejected" && (
@@ -216,7 +233,7 @@ export function ReviewWorkflow({
                   <button onClick={() => run("save", () => saveTranscription(task.id, transcriptValue))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{needsSpecialistTranscription ? "Save specialist transcription" : "Save edits"}</button>
                 )}
                 {permissions.canVerify ? (
-                  <button onClick={() => run("verify", () => verifyTranscription(task.id, transcriptValue, specialistNotes))} disabled={pending || transcriptValue.trim().length === 0} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
+                  <button onClick={() => run("verify", () => verifyTranscription(task.id, transcriptValue, specialistNotes))} disabled={pending || mockDraft || transcriptValue.trim().length === 0} title={mockDraft ? "Run live transcription before specialist verification" : undefined} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
                 ) : (<span className="text-xs text-zinc-400">A QTVI, admin, or Braille-literate staff member must verify this.</span>)}
               </div>
             )}
@@ -264,10 +281,10 @@ export function ReviewWorkflow({
                   </>
                 ) : (
                   <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-zinc-100 pt-4">
-                    <ExportGateHint className="mr-auto" message="Export locked until approval" />
+                    <ExportGateHint className="mr-auto" message={feedbackApprovalBlocked ? "Approval locked: complete both feedback fields" : "Export locked until approval"} />
                     <button onClick={() => run("savefb", () => saveFeedback(task.id, commentsValue, learnerValue))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "savefb" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
                     {permissions.canApproveFeedback ? (
-                      <button onClick={() => run("approvefb", () => approveFeedback(task.id))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approvefb" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve report</button>
+                      <button onClick={() => run("approvefb", () => approveFeedback(task.id, commentsValue, learnerValue))} disabled={pending || feedbackApprovalBlocked} title={feedbackApprovalBlocked ? "Complete both feedback fields before approval" : undefined} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{action === "approvefb" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve report</button>
                     ) : (<span className="text-xs text-zinc-400">A teacher or QTVI must approve.</span>)}
                   </div>
                 )}

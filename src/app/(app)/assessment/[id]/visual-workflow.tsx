@@ -36,7 +36,9 @@ export function VisualWorkflow({ task, upload, permissions }: { task: VisualDesc
 
   const contextRisk = !hasCompleteAssessmentContext(context, questionPrompt, assessedSkill);
   const aiFlags = task.aiFlags ?? [];
-  const aiUnavailable = aiFlags.some((f) => f.category === "provider_unavailable" || f.category === "processing_failed" || f.category === "real_pupil_data_blocked");
+  const aiUnavailable = aiFlags.some((f) =>
+    ["provider_unavailable", "processing_failed", "real_pupil_data_blocked", "pdf_processing_pending"].includes(f.category),
+  );
   const sourceUnavailable = !upload?.src;
   const effectiveText = text ?? task.editedDescription;
   const approvalBlocked = contextRisk || aiUnavailable || sourceUnavailable || !effectiveText.trim();

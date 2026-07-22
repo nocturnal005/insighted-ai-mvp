@@ -22,7 +22,7 @@ function pick<T extends string>(raw: FormDataEntryValue | null, allowed: readonl
 
 /** Add a held-out ground-truth sample (image optional, correct transcription required). */
 export async function addEvalSample(formData: FormData) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "audit.read")) throw new Error("Not permitted");
 
   const label = String(formData.get("label") || "").trim();
@@ -82,7 +82,7 @@ export async function addEvalSample(formData: FormData) {
  * numbers are never mistaken for a real OCR measurement.
  */
 export async function runEvaluation() {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "audit.read")) throw new Error("Not permitted");
 
   const now = new Date().toISOString();
@@ -165,7 +165,7 @@ export async function runEvaluation() {
 }
 
 export async function deleteEvalSample(formData: FormData) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "audit.read")) throw new Error("Not permitted");
   const sampleId = String(formData.get("sampleId"));
   const removed = db.evalSamples.find((s) => s.id === sampleId);

@@ -13,14 +13,15 @@ export const dynamic = "force-dynamic";
  * Print-optimised export view. Opening it stamps the record as exported (audit) and the
  * user saves it as PDF via the browser print dialog — zero-dependency "PDF export".
  */
-export default async function PrintPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { kind?: string };
-}) {
-  const user = requireUser();
+export default async function PrintPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ kind?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
+  const user = await requireUser();
   const kind = searchParams.kind;
   if (!isExportKind(kind) || !can(user.role, "export")) notFound();
   if (kind === "transcription" || kind === "feedback") await hydrateBrailleTask(params.id);

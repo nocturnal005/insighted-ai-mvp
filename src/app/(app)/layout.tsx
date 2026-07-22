@@ -10,8 +10,8 @@ import { signOut } from "@/app/login/actions";
 // attempting static generation of authenticated pages.
 export const dynamic = "force-dynamic";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = requireUser();
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const user = await requireUser();
 
   return (
     <div className="flex min-h-screen bg-zinc-50">

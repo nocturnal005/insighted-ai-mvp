@@ -12,7 +12,7 @@ import { hydrateBrailleTasks } from "@/lib/durable-braille";
 
 export default async function DashboardPage() {
   await hydrateBrailleTasks();
-  const user = requireUser();
+  const user = await requireUser();
   const stats = getDashboardStats();
 
   return (

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getVisualTask, getTaskAudit, getTaskUpload } from "@/lib/data";
-import { pupilLabel, uploadDataUrl, userName } from "@/lib/store";
+import { pupilLabel, userName } from "@/lib/store";
 import { can } from "@/lib/rbac";
 import { assessmentContextLabel } from "@/lib/assessment-context";
 import { TaskBadge } from "@/components/ui/badge";
@@ -11,19 +11,19 @@ import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
 import { VisualWorkflow } from "./visual-workflow";
 
-export default function VisualDetailPage({ params }: { params: { id: string } }) {
-  const user = requireUser();
+export default async function VisualDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const user = await requireUser();
   const task = getVisualTask(params.id);
   if (!task) notFound();
 
   const up = getTaskUpload(task.id);
   const timeline = getTaskAudit(task.id);
-  const sourceDataUrl = up ? uploadDataUrl(up) : "";
   const upload = up
     ? {
-        // Demo uploads may live only in the Server Action instance. Inlining the bounded
-        // file keeps the review page functional; production should use object storage.
-        src: sourceDataUrl,
+        // Keep binary data out of the React Server Component payload. The protected
+        // route streams it only when the browser actually needs to render the source.
+        src: `/api/source/${encodeURIComponent(task.id)}?preview=1`,
         fileName: up.fileName,
         fileType: up.fileType,
         uploaderName: userName(up.uploadedBy),

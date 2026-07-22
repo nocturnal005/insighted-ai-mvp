@@ -13,7 +13,7 @@ import { generateFeedback } from "@/lib/feedback";
 import type { BrailleTask } from "@/lib/types";
 
 export async function createBrailleTask(formData: FormData) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "task.create")) throw new Error("Not permitted");
 
   const title = String(formData.get("title") || "").trim();
@@ -21,6 +21,11 @@ export async function createBrailleTask(formData: FormData) {
   const pupilId = String(formData.get("pupilId") || "") || null;
   const file = formData.get("image") as File | null;
   if (!title) throw new Error("Title is required");
+  let uploadBuffer: Buffer | null = null;
+  if (file && file.size > 0) {
+    assertValidUpload(file);
+    uploadBuffer = Buffer.from(await file.arrayBuffer());
+  }
 
   const now = new Date().toISOString();
   const task: BrailleTask = {
@@ -52,16 +57,14 @@ export async function createBrailleTask(formData: FormData) {
     newStatus: task.status,
   });
 
-  if (file && file.size > 0) {
-    assertValidUpload(file);
-    const buf = Buffer.from(await file.arrayBuffer());
+  if (file && uploadBuffer) {
     task.uploadId = createUpload({
       taskId: task.id,
       module: "braille",
       fileName: file.name,
       fileType: file.type,
       byteSize: file.size,
-      data: buf,
+      data: uploadBuffer,
       uploadedBy: user,
     });
   }
@@ -77,7 +80,7 @@ export async function createBrailleTask(formData: FormData) {
  * carry the previous draft so a regeneration never silently discards edits).
  */
 async function executeTranscription(
-  user: ReturnType<typeof requireUser>,
+  user: Awaited<ReturnType<typeof requireUser>>,
   task: BrailleTask,
   reason?: string,
 ) {
@@ -167,7 +170,7 @@ async function executeTranscription(
 }
 
 export async function runTranscription(taskId: string) {
-  const user = requireUser();
+  const user = await requireUser();
   const task = await hydrateBrailleTask(taskId, { includeUploadData: true });
   if (!task) throw new Error("Task not found");
   await executeTranscription(user, task);
@@ -179,7 +182,7 @@ export async function runTranscription(taskId: string) {
  * never silently overwritten. The previous draft is preserved in the audit reason.
  */
 export async function rerunBrailleTranscription(taskId: string) {
-  const user = requireUser();
+  const user = await requireUser();
   const task = await hydrateBrailleTask(taskId, { includeUploadData: true });
   if (!task) throw new Error("Task not found");
   if (task.status === "rejected" || task.status === "archived") throw new Error("Task is closed");
@@ -195,7 +198,7 @@ export async function rerunBrailleTranscription(taskId: string) {
 }
 
 export async function saveTranscription(taskId: string, editedText: string) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "transcription.edit")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription) throw new Error("Nothing to edit");
@@ -217,12 +220,16 @@ export async function saveTranscription(taskId: string, editedText: string) {
 }
 
 export async function verifyTranscription(taskId: string, finalText: string, specialistNotes = "") {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate })) {
     throw new Error("Only QTVI, admin, or explicitly Braille-literate staff can verify Braille accuracy");
   }
   const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription) throw new Error("Nothing to verify");
+  if (!finalText.trim()) throw new Error("A specialist-reviewed transcription is required");
+  if (task.transcription.aiMode === "mock") {
+    throw new Error("Demo placeholder text cannot be specialist-verified. Run live transcription or enter a supported source workflow.");
+  }
 
   const previousStatus = task.status;
   task.transcription.editedText = finalText;
@@ -261,7 +268,7 @@ export async function verifyTranscription(taskId: string, finalText: string, spe
 }
 
 export async function createFeedback(taskId: string) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "feedback.generate")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription || task.transcription.status !== "specialist_verified" || !task.transcription.finalText) {
@@ -305,7 +312,7 @@ export async function createFeedback(taskId: string) {
 
 /** Save staff edits to the feedback report (teacher comments + learner summary). */
 export async function saveFeedback(taskId: string, teacherComments: string, learnerSummary: string) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "feedback.generate")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
   if (!task?.feedback) throw new Error("No feedback to edit");
@@ -329,19 +336,27 @@ export async function saveFeedback(taskId: string, teacherComments: string, lear
 }
 
 /** Approve the feedback report — required before it can be exported. */
-export async function approveFeedback(taskId: string) {
-  const user = requireUser();
+export async function approveFeedback(taskId: string, teacherComments?: string, learnerSummary?: string) {
+  const user = await requireUser();
   if (!can(user.role, "feedback.approve")) throw new Error("Only a teacher or QTVI can approve");
   const task = await hydrateBrailleTask(taskId);
   if (!task?.feedback) throw new Error("No feedback to approve");
+  const reviewedComments = String(teacherComments ?? task.feedback.teacherComments).trim();
+  const reviewedSummary = String(learnerSummary ?? task.feedback.learnerSummary).trim();
+  if (!reviewedComments || !reviewedSummary) {
+    throw new Error("Teacher feedback and a learner-friendly summary are required");
+  }
 
   const previousStatus = task.status;
+  task.feedback.teacherComments = reviewedComments;
+  task.feedback.subjectFeedback = reviewedComments;
+  task.feedback.learnerSummary = reviewedSummary;
   task.feedback.status = "approved";
   task.feedback.approvedBy = user.id;
   task.feedback.approvedAt = new Date().toISOString();
   task.feedback.teacherReviewedBy = user.id;
   task.feedback.teacherReviewedAt = task.feedback.approvedAt;
-  task.feedback.approvedFinalComments = task.feedback.teacherComments;
+  task.feedback.approvedFinalComments = reviewedComments;
   if (task.transcription) {
     task.transcription.subjectTeacherReviewedBy = user.id;
     task.transcription.subjectTeacherReviewedAt = task.feedback.approvedAt;
@@ -364,7 +379,7 @@ export async function approveFeedback(taskId: string) {
 }
 
 export async function rejectBrailleTask(taskId: string, reason: string) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "task.reject")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
   if (!task) throw new Error("Not found");
@@ -390,7 +405,7 @@ export async function rejectBrailleTask(taskId: string, reason: string) {
 }
 
 export async function archiveBrailleTask(taskId: string) {
-  const user = requireUser();
+  const user = await requireUser();
   if (!can(user.role, "task.archive")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
   if (!task) throw new Error("Not found");

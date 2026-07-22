@@ -5,8 +5,8 @@ import { getPupils, getPupilWork } from "@/lib/data";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 
-export default function PupilsPage() {
-  requireUser();
+export default async function PupilsPage() {
+  await requireUser();
   const pupils = getPupils();
 
   return (

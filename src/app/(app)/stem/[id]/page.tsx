@@ -11,8 +11,9 @@ import { TaskTimeline } from "@/components/task-timeline";
 import { formatRelative } from "@/lib/utils";
 import { StemWorkflow } from "./stem-workflow";
 
-export default function StemDetailPage({ params }: { params: { id: string } }) {
-  const user = requireUser();
+export default async function StemDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const user = await requireUser();
   const task = getStemTask(params.id);
   if (!task) notFound();
 
@@ -20,7 +21,7 @@ export default function StemDetailPage({ params }: { params: { id: string } }) {
   const timeline = getTaskAudit(task.id);
   const upload = up
     ? {
-        src: `/api/source/${encodeURIComponent(task.id)}`,
+        src: `/api/source/${encodeURIComponent(task.id)}?preview=1`,
         fileName: up.fileName,
         fileType: up.fileType,
         uploaderName: userName(up.uploadedBy),

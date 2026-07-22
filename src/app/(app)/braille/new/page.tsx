@@ -5,8 +5,8 @@ import { getPupils } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { NewBrailleForm } from "./new-braille-form";
 
-export default function NewBraillePage() {
-  requireUser();
+export default async function NewBraillePage() {
+  await requireUser();
   const pupils = getPupils();
 
   return (
