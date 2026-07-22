@@ -5,8 +5,8 @@ import { getPupils } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { NewVisualForm } from "./new-visual-form";
 
-export default function NewVisualPage() {
-  requireUser();
+export default async function NewVisualPage() {
+  await requireUser();
   const pupils = getPupils();
   return (
     <div className="max-w-2xl">

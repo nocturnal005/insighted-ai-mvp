@@ -7,7 +7,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import http from "node:http";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -191,12 +191,19 @@ class Session {
 }
 
 function brailleActionIds() {
-  const compiled = readFileSync(path.join(ROOT, ".next", "server", "app", "(app)", "braille", "new", "page.js"), "utf8");
-  for (const match of compiled.matchAll(/__next_internal_action_entry_do_not_use__ \{([^}]+)\}/g)) {
-    if (!match[1].includes("runTranscription")) continue;
+  for (const manifestPath of [
+    path.join(ROOT, ".next", "dev", "server", "server-reference-manifest.json"),
+    path.join(ROOT, ".next", "server", "server-reference-manifest.json"),
+  ]) {
+    if (!existsSync(manifestPath)) continue;
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     const ids = {};
-    for (const pair of match[1].matchAll(/\\?"([a-f0-9]{40})\\?":\\?"(\w+)\\?"/g)) ids[pair[2]] = pair[1];
-    return ids;
+    for (const [actionId, entry] of Object.entries(manifest.node ?? {})) {
+      if (String(entry.filename).replaceAll("\\", "/").endsWith("src/app/(app)/braille/actions.ts")) {
+        ids[entry.exportedName] = actionId;
+      }
+    }
+    if (ids.runTranscription) return ids;
   }
   throw new Error("braille action ids not found");
 }
@@ -211,6 +218,8 @@ async function main() {
     const session = await new Session().login();
     const taskPath = await session.createTask();
     const taskId = taskPath.split("/").pop();
+    // Compile the dynamic detail route before reading its per-route action manifest.
+    await (await session.get(taskPath)).text();
     const response = await session.invoke(taskPath, brailleActionIds().runTranscription, [taskId]);
     check("Run transcription completes", response.status === 200, `status=${response.status}`);
 

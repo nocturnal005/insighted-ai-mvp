@@ -8,8 +8,8 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { secureDeleteExpiredMaterial, setUserRole, setRetention, setBrailleLiterate } from "./actions";
 
-export default function AdminPage() {
-  const user = requireUser();
+export default async function AdminPage() {
+  const user = await requireUser();
   if (!can(user.role, "org.manage")) redirect("/dashboard");
 
   const users = getUsers();

@@ -11,8 +11,9 @@ import type { User } from "@/lib/types";
 const COOKIE = "insighted_session";
 export const DEMO_MODE = process.env.DEMO_MODE !== "false";
 
-export function setSession(userId: string): void {
-  cookies().set(COOKIE, userId, {
+export async function setSession(userId: string): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set(COOKIE, userId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -21,19 +22,21 @@ export function setSession(userId: string): void {
   });
 }
 
-export function clearSession(): void {
-  cookies().delete(COOKIE);
+export async function clearSession(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.delete(COOKIE);
 }
 
-export function getCurrentUser(): User | null {
-  const userId = cookies().get(COOKIE)?.value;
+export async function getCurrentUser(): Promise<User | null> {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get(COOKIE)?.value;
   if (!userId) return null;
   return findUser(userId) ?? null;
 }
 
 /** Require auth in a Server Component / Action; redirect to /login otherwise. */
-export function requireUser(): User {
-  const user = getCurrentUser();
+export async function requireUser(): Promise<User> {
+  const user = await getCurrentUser();
   if (!user) redirect("/login");
   return user;
 }

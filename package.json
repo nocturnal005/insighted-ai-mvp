@@ -4,10 +4,10 @@
   "private": true,
   "description": "InsightEd AI — runnable MVP. Secure, human-verified accessibility workflow for VI education teams.",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "validate": "npm run validate:mvp && npm run validate:ai && npm run validate:demo && npm run validate:external-ocr && npm run validate:abc-braille && npm run validate:hybrid-braille",
     "validate:mvp": "node scripts/validate-mvp.mjs",
@@ -27,26 +27,30 @@
     "@neondatabase/serverless": "^1.1.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.439.0",
-    "next": "^14.2.35",
+    "next": "^16.2.11",
     "openai": "^6.45.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "sharp": "^0.35.3",
     "tailwind-merge": "^2.5.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20.16.5",
-    "@types/react": "^18.3.7",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "^14.2.35",
-    "postcss": "^8.5.16",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.11",
+    "postcss": "^8.5.22",
     "tailwindcss": "^3.4.12",
     "typescript": "^5.6.2"
   },
   "engines": {
-    "node": ">=18.18.0"
+    "node": ">=20.9.0"
+  },
+  "overrides": {
+    "postcss": "$postcss",
+    "sharp": "$sharp"
   }
 }

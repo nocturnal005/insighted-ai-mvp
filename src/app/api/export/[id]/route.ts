@@ -12,8 +12,9 @@ export const dynamic = "force-dynamic";
  * GET /api/export/:id?kind=transcription|feedback|visual|stem
  * Returns a plain-text download. Enforces the approval gate and logs the export.
  */
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  const user = getCurrentUser();
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   if (!can(user.role, "export")) return NextResponse.json({ error: "Not permitted" }, { status: 403 });
 

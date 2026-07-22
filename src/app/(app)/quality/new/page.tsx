@@ -6,8 +6,8 @@ import { can } from "@/lib/rbac";
 import { PageHeader } from "@/components/page-header";
 import { NewSampleForm } from "./new-sample-form";
 
-export default function NewSamplePage() {
-  const user = requireUser();
+export default async function NewSamplePage() {
+  const user = await requireUser();
   if (!can(user.role, "audit.read")) redirect("/dashboard");
 
   return (

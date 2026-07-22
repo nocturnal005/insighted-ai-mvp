@@ -42,7 +42,8 @@ export function SourceImage({ upload, label = "Source image" }: { upload: Source
               alt={`Uploaded file: ${upload.fileName}`}
               width={1200}
               height={900}
-              loading="eager"
+              loading="lazy"
+              fetchPriority="low"
               decoding="async"
               className="h-full w-full object-contain"
             />

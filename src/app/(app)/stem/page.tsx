@@ -9,8 +9,8 @@ import { TaskBadge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { formatRelative } from "@/lib/utils";
 
-export default function StemListPage() {
-  requireUser();
+export default async function StemListPage() {
+  await requireUser();
   const tasks = getStemTasks();
 
   return (

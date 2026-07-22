@@ -11,11 +11,12 @@
  * Sharp is optional: if the native binary is unavailable (e.g. Vercel build environment),
  * image normalisation is skipped and the original data URL is returned with a warning.
  */
-let sharpModule: any = null;
-try {
-  sharpModule = require("sharp");
-} catch {
-  // Native sharp binary not available; preprocessing will skip normalisation.
+type SharpFactory = typeof import("sharp")["default"];
+let sharpModulePromise: Promise<SharpFactory | null> | null = null;
+
+function loadSharp(): Promise<SharpFactory | null> {
+  sharpModulePromise ??= import("sharp").then((module) => module.default).catch(() => null);
+  return sharpModulePromise;
 }
 import type { UncertaintyFlag } from "./types";
 import { validateUpload } from "./config";
@@ -58,6 +59,7 @@ function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } | null 
  * Never throws — failures degrade to the original data URL with a warning flag.
  */
 export async function preprocessImage(input: PreprocessInput): Promise<PreprocessResult> {
+  const sharpModule = await loadSharp();
   const warnings: UncertaintyFlag[] = [];
 
   // Type/size gate (best-effort; provider still receives something usable).

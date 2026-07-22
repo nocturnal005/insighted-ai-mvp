@@ -5,8 +5,8 @@ import { getPupils } from "@/lib/data";
 import { PageHeader } from "@/components/page-header";
 import { NewStemForm } from "./new-stem-form";
 
-export default function NewStemPage() {
-  requireUser();
+export default async function NewStemPage() {
+  await requireUser();
   const pupils = getPupils();
   return (
     <div className="max-w-2xl">

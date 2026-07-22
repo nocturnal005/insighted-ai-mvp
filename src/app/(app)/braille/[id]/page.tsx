@@ -12,8 +12,9 @@ import { isPrivateProviderIdentity, redactPrivateBrailleProvenance } from "@/lib
 import { ReviewWorkflow } from "./review-workflow";
 import { hydrateBrailleTask } from "@/lib/durable-braille";
 
-export default async function BrailleDetailPage({ params }: { params: { id: string } }) {
-  const user = requireUser();
+export default async function BrailleDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const user = await requireUser();
   const task = (await hydrateBrailleTask(params.id)) ?? getBrailleTask(params.id);
   if (!task) notFound();
 
@@ -23,7 +24,7 @@ export default async function BrailleDetailPage({ params }: { params: { id: stri
   const taskForDisplay = redactPrivateBrailleProvenance(task);
   const upload = up
     ? {
-        src: `/api/source/${encodeURIComponent(task.id)}`,
+        src: `/api/source/${encodeURIComponent(task.id)}?preview=1`,
         fileName: up.fileName,
         fileType: up.fileType,
         uploaderName: userName(up.uploadedBy),

@@ -14,14 +14,10 @@ import { visibleNavItems } from "./app-nav";
  * sidebar (`visibleNavItems`), so admin/audit links never leak to roles without access.
  */
 export function MobileNav({ role }: { role: UserRole }) {
-  const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const open = openPath === pathname;
   const items = visibleNavItems(role);
-
-  // Close the drawer whenever the route changes.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
 
   // Close on Escape and lock body scroll while open.
   useEffect(() => {
@@ -29,7 +25,7 @@ export function MobileNav({ role }: { role: UserRole }) {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") setOpenPath(null);
     };
     document.addEventListener("keydown", onKey);
     return () => {
@@ -42,7 +38,7 @@ export function MobileNav({ role }: { role: UserRole }) {
     <div className="lg:hidden">
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenPath(pathname)}
         aria-label="Open navigation menu"
         aria-expanded={open}
         aria-controls="mobile-nav-drawer"
@@ -55,7 +51,7 @@ export function MobileNav({ role }: { role: UserRole }) {
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Navigation">
           <div
             className="absolute inset-0 bg-zinc-900/40"
-            onClick={() => setOpen(false)}
+            onClick={() => setOpenPath(null)}
             aria-hidden="true"
           />
           <div
@@ -69,7 +65,7 @@ export function MobileNav({ role }: { role: UserRole }) {
               <span className="font-semibold tracking-tight text-zinc-900">InsightEd AI</span>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => setOpenPath(null)}
                 aria-label="Close navigation menu"
                 className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-50"
               >
@@ -86,7 +82,7 @@ export function MobileNav({ role }: { role: UserRole }) {
                     href={item.href}
                     prefetch={false}
                     aria-current={active ? "page" : undefined}
-                    onClick={() => setOpen(false)}
+                    onClick={() => setOpenPath(null)}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
                       active

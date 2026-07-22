@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/session";
-import { Card, CardBody } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 
 /** Placeholder DPIA — structured so it can be completed properly later. */
@@ -12,8 +12,8 @@ const ROWS: [string, string, string][] = [
   ["Risk: data misuse", "RBAC, audit logs, no training on pupil data, configurable retention, secure deletion", "Mitigated"],
 ];
 
-export default function DpiaPage() {
-  requireUser();
+export default async function DpiaPage() {
+  await requireUser();
   return (
     <div className="max-w-3xl">
       <PageHeader title="Data Protection Impact Assessment" description="Draft — placeholder structure to be completed and signed off before launch." />

@@ -24,14 +24,36 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
   const [text, setText] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [action, setAction] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const aiFlags = task.aiFlags ?? [];
+  const aiUnavailable = aiFlags.some((flag) =>
+    ["provider_unavailable", "processing_failed", "real_pupil_data_blocked", "pdf_processing_pending"].includes(flag.category),
+  );
+  const effectiveText = text ?? task.editedDescription;
+  const approvalBlocked = aiUnavailable || !effectiveText.trim();
 
   function run(name: string, fn: () => Promise<void>) {
+    setError(null);
     setAction(name);
-    start(async () => { await fn(); setAction(null); });
+    start(async () => {
+      try {
+        await fn();
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "The action could not be completed");
+      } finally {
+        setAction(null);
+      }
+    });
   }
 
   return (
     <div className="space-y-5">
+      {error && (
+        <div role="alert" className="flex items-start gap-2.5 rounded-xl bg-critical-50 px-4 py-3 text-sm text-critical-700">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
       {/* Suggested structure for this visual type */}
       <Card>
         <CardHeader><CardTitle>Suggested structure</CardTitle><span className="inline-flex items-center gap-1.5 text-xs text-zinc-400"><ListChecks className="h-3.5 w-3.5" /> Based on visual type</span></CardHeader>
@@ -88,8 +110,8 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
               confidence={task.confidence}
               promptVersion={task.promptVersion}
               processingMs={task.processingMs}
-              flagCount={task.aiFlags?.length}
-              unavailable={(task.aiFlags ?? []).some((f) => f.category === "provider_unavailable" || f.category === "processing_failed" || f.category === "real_pupil_data_blocked")}
+              flagCount={aiFlags.length}
+              unavailable={aiUnavailable}
             />
             {!approved && permissions.canEdit && Boolean(upload) && (
               <button
@@ -105,7 +127,7 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
           {!approved && (
             <div className="flex items-start gap-2.5 rounded-xl bg-caution-50 px-3.5 py-3 text-sm text-caution-700"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><span>This is an AI draft. Check the structure and remove anything that reveals the answer before approving.</span></div>
           )}
-          <textarea value={text ?? task.editedDescription} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={9} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
+          <textarea value={effectiveText} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={9} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
 
           {approved ? (
             <>
@@ -114,12 +136,12 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
             </>
           ) : (
             <div className="flex flex-wrap items-center justify-end gap-2.5">
-              <ExportGateHint className="mr-auto" message="Export locked until approval" />
+              <ExportGateHint className="mr-auto" message={aiUnavailable ? "Approval locked: generate a valid draft" : !effectiveText.trim() ? "Approval locked: add a reviewed description" : "Export locked until approval"} />
               {permissions.canEdit && (
                 <button onClick={() => run("save", () => updateStem(task.id, text ?? task.editedDescription))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save changes</button>
               )}
               {permissions.canApprove ? (
-                <button onClick={() => run("approve", () => approveStem(task.id, text ?? task.editedDescription))} disabled={pending} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve & save to record</button>
+                <button onClick={() => run("approve", () => approveStem(task.id, effectiveText))} disabled={pending || approvalBlocked} title={approvalBlocked ? "Resolve the review warnings before approval" : undefined} className="inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{action === "approve" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Approve & save to record</button>
               ) : (<span className="text-xs text-zinc-400">A teacher or QTVI must approve this.</span>)}
             </div>
           )}

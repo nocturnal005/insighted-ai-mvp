@@ -10,11 +10,12 @@ import type { UncertaintyFlag } from "./types";
 import { validateUpload } from "./config";
 import { makeFlag, pdfPendingFlag } from "./uncertainty";
 
-let sharpModule: any = null;
-try {
-  sharpModule = require("sharp");
-} catch {
-  // Optional native dependency. The original image remains usable when unavailable.
+type SharpFactory = typeof import("sharp")["default"];
+let sharpModulePromise: Promise<SharpFactory | null> | null = null;
+
+function loadSharp(): Promise<SharpFactory | null> {
+  sharpModulePromise ??= import("sharp").then((module) => module.default).catch(() => null);
+  return sharpModulePromise;
 }
 
 const REVIEW_WIDTH = 1800;
@@ -62,6 +63,7 @@ function qualityFlag(text: string, reason: string, severity: "low" | "medium" | 
 
 /** Prepare one primary image and high-detail crops for secondary review. Never throws. */
 export async function preprocessBrailleImage(input: BraillePreprocessInput): Promise<BraillePreprocessResult> {
+  const sharpModule = await loadSharp();
   const warnings: UncertaintyFlag[] = [];
   const check = validateUpload({ mimeType: input.mimeType, byteSize: input.byteSize });
   if (!check.ok) warnings.push(qualityFlag("Upload validation warning", check.reason ?? "Upload failed validation.", "high"));
