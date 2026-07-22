@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getVisualTask, getTaskAudit, getTaskUpload } from "@/lib/data";
 import { pupilLabel, userName } from "@/lib/store";
+import { sourcePreviewDataUrl } from "@/lib/source-preview";
 import { can } from "@/lib/rbac";
 import { assessmentContextLabel } from "@/lib/assessment-context";
 import { TaskBadge } from "@/components/ui/badge";
@@ -19,11 +20,13 @@ export default async function VisualDetailPage(props: { params: Promise<{ id: st
 
   const up = getTaskUpload(task.id);
   const timeline = getTaskAudit(task.id);
+  const sourceDataUrl = up ? await sourcePreviewDataUrl(up) : "";
   const upload = up
     ? {
-        // Keep binary data out of the React Server Component payload. The protected
-        // route streams it only when the browser actually needs to render the source.
-        src: `/api/source/${encodeURIComponent(task.id)}?preview=1`,
+        // Vercel functions do not share this demo's in-memory uploads. Inline only a
+        // compressed preview so the source remains available without the original
+        // multi-megabyte React payload.
+        src: sourceDataUrl,
         fileName: up.fileName,
         fileType: up.fileType,
         uploaderName: userName(up.uploadedBy),

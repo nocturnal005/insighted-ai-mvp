@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getStemTask, getTaskAudit, getTaskUpload } from "@/lib/data";
 import { pupilLabel, userName } from "@/lib/store";
+import { sourcePreviewDataUrl } from "@/lib/source-preview";
 import { can } from "@/lib/rbac";
 import { VISUAL_TYPE_LABELS, STRUCTURE_TEMPLATES } from "@/lib/braille-engine";
 import { TaskBadge } from "@/components/ui/badge";
@@ -19,9 +20,12 @@ export default async function StemDetailPage(props: { params: Promise<{ id: stri
 
   const up = getTaskUpload(task.id);
   const timeline = getTaskAudit(task.id);
+  const sourceDataUrl = up ? await sourcePreviewDataUrl(up) : "";
   const upload = up
     ? {
-        src: `/api/source/${encodeURIComponent(task.id)}?preview=1`,
+        // Assessment/STEM uploads can be process-local in the demo deployment, so
+        // render a bounded preview from the same function that loaded the task.
+        src: sourceDataUrl,
         fileName: up.fileName,
         fileType: up.fileType,
         uploaderName: userName(up.uploadedBy),

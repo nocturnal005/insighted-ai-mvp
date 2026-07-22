@@ -8,6 +8,7 @@ const mustExist = [
   "src/lib/ai/providers/external-braille-provider.ts",
   "src/lib/ai/providers/braille-translation-provider.ts",
   "src/lib/ai/providers/mock-provider.ts",
+  "src/lib/source-preview.ts",
 ];
 
 // Positive checks: each file must contain each string.
@@ -109,6 +110,18 @@ const checks = [
     mustContain: [".insighted-data", "purgeExpiredUploads", "storagePath"],
   },
   {
+    file: "src/lib/source-preview.ts",
+    mustContain: ["sourcePreviewDataUrl", "resize({ width: 1440", "data:image/webp;base64"],
+  },
+  {
+    file: "src/app/(app)/assessment/[id]/page.tsx",
+    mustContain: ["sourcePreviewDataUrl", "src: sourceDataUrl"],
+  },
+  {
+    file: "src/app/(app)/stem/[id]/page.tsx",
+    mustContain: ["sourcePreviewDataUrl", "src: sourceDataUrl"],
+  },
+  {
     file: "scripts/reset-demo.mjs",
     mustContain: [".insighted-data", "rmSync"],
   },
@@ -147,6 +160,13 @@ const negativeChecks = [
       "src/app/(app)/stem/[id]/stem-workflow.tsx",
     ],
     mustNotContain: ["text || task.editedDescription"],
+  },
+  {
+    files: [
+      "src/app/(app)/assessment/[id]/page.tsx",
+      "src/app/(app)/stem/[id]/page.tsx",
+    ],
+    mustNotContain: ["/api/source/"],
   },
 ];
 
