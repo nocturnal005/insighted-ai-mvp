@@ -8,7 +8,7 @@
  */
 import type { AiMode, AiProviderName, BrailleOcrProviderName } from "./types";
 
-const DEFAULT_VISION_MODEL = "gpt-4.1";
+const DEFAULT_VISION_MODEL = "gpt-5.4-mini";
 const DEFAULT_TEXT_MODEL = "gpt-4.1";
 const DEFAULT_MAX_UPLOAD_MB = 10;
 const DEFAULT_OPENAI_TIMEOUT_MS = 60000;
@@ -82,9 +82,14 @@ export interface AiConfig {
  */
 export function getAiConfig(): AiConfig {
   const mode = normaliseMode(readEnv("AI_MODE"));
+  // OpenAI is the only live Assessment/STEM provider in this build. Treat the
+  // contradictory AI_MODE=real + AI_PROVIDER=mock combination as live OpenAI so a
+  // stale environment variable can never make an uploaded diagram receive fake,
+  // metadata-only feedback.
+  const provider = mode === "real" ? "openai" : normaliseProvider(readEnv("AI_PROVIDER"));
   return {
     mode,
-    provider: normaliseProvider(readEnv("AI_PROVIDER")),
+    provider,
     brailleOcrProvider: normaliseBrailleProvider(readEnv("BRAILLE_OCR_PROVIDER")),
     visionModel: readEnv("OPENAI_VISION_MODEL") ?? DEFAULT_VISION_MODEL,
     textModel: readEnv("OPENAI_TEXT_MODEL") ?? DEFAULT_TEXT_MODEL,

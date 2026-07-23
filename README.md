@@ -2,7 +2,7 @@
 
 > Secure, human-verified accessibility workflow for visual impairment education teams.
 
-InsightEd AI is a controlled-demo and pilot-readiness MVP for mainstream secondary school VI support workflows. The workflow mechanics are functional: role checks, specialist verification, teacher feedback approval, audit logging, exports, local persistence, upload metadata, and retention deletion.
+InsightEd AI is a controlled-demo and pilot-readiness MVP for mainstream secondary school VI support workflows. The workflow mechanics are functional: role checks, specialist verification, teacher feedback approval, audit logging, exports, durable Neon-backed task persistence when configured, upload metadata, and retention deletion.
 
 The AI/OCR layer is provider-based. The recommended live path sends an unlinked PNG/JPEG to ABC Braille for the primary draft, optionally compares its detected cells with Liblouis, and asks OpenAI for structured discrepancy evidence. OpenAI never replaces the ABC draft or applies a correction. Explicit mock, ABC-only, OpenAI-draft, and external JSON OCR providers remain available. Every output is a draft, and Braille accuracy always requires specialist verification before teacher feedback or export.
 
@@ -11,6 +11,7 @@ The AI/OCR layer is provider-based. The recommended live path sends an unlinked 
 ```bash
 npm install
 npm run reset:demo
+npm run generate:demo-fixtures
 npm run dev
 ```
 
@@ -32,9 +33,9 @@ Copy `.env.example` to `.env` and adjust. Missing keys never crash the app — a
 | --- | --- | --- |
 | `DEMO_MODE` | `true` | Enables the local staff-picker login. Set `DEMO_MODE=false` before wiring Supabase Auth or another identity provider. |
 | `AI_MODE` | `mock` | `mock` uses safe offline providers. `real` uses configured real providers. |
-| `AI_PROVIDER` | `openai` | Real vision/text provider (currently `openai`). Invalid values fall back to mock. |
+| `AI_PROVIDER` | `openai` | Real vision/text provider (currently `openai`). `AI_MODE=real` always selects this live route so a stale mock value cannot produce fake diagram feedback. |
 | `OPENAI_API_KEY` | _(empty)_ | Server-only OpenAI key. Never logged, shown, or audited. |
-| `OPENAI_VISION_MODEL` | `gpt-4.1` | Vision model for visual/STEM/Braille-draft. |
+| `OPENAI_VISION_MODEL` | `gpt-5.4-mini` | Vision model for visual/STEM descriptions and Braille discrepancy review. |
 | `OPENAI_TEXT_MODEL` | `gpt-4.1` | Text model (reserved for future text-only steps). |
 | `BRAILLE_OCR_PROVIDER` | `abc_braille_web` | `abc_openai_review` (recommended live path) \| `abc_braille_web` \| `mock` \| `openai_vision_draft` \| `external_braille_ocr`. |
 | `ABC_BRAILLE_BASE_URL` | `https://www.abcbraille.com` | Server-only base URL for ABC Braille's public web translator. Loopback HTTP is accepted only for contract tests. |
@@ -43,6 +44,8 @@ Copy `.env.example` to `.env` and adjust. Missing keys never crash the app — a
 | `BRAILLE_OCR_ENDPOINT` | _(empty)_ | HTTPS endpoint for the external Braille OCR adapter. |
 | `BRAILLE_OCR_API_KEY` | _(empty)_ | Server-only bearer token for that endpoint. |
 | `BRAILLE_OCR_TIMEOUT_MS` | `30000` | Request timeout for the external Braille OCR endpoint. |
+| `DATABASE_URL` | _(empty)_ | Neon/Postgres connection string for durable Braille, Assessment-Safe, and STEM records and source uploads. |
+| `POSTGRES_URL` / `NEON_DATABASE_URL` | _(empty)_ | Accepted aliases for an existing Neon/Postgres connection string. |
 | `LIBLOUIS_ENABLED` | `false` | Enable the optional Liblouis back-translation CLI. Off by default. |
 | `LIBLOUIS_COMMAND` | _(empty)_ | Path to a `lou_translate`-style CLI (only used when enabled). |
 | `LIBLOUIS_TABLE` | `en-ueb-g2.ctb` | Liblouis translation table. |
@@ -79,6 +82,9 @@ AI_MODE=real
 AI_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 BRAILLE_OCR_PROVIDER=abc_openai_review
+LIBLOUIS_ENABLED=true
+LIBLOUIS_COMMAND=/path/to/lou_translate
+DATABASE_URL=postgresql://...
 ```
 
 ABC remains the source of `draftText`. Braille-specific preprocessing supplies OpenAI with a lossless whole-page image and, for large pages, overlapping high-detail bands. Liblouis back-translation is included when configured. OpenAI returns schema-validated discrepancy records only; staff see the evidence beside the editable draft, and no suggestion is ever applied automatically. A numeric consensus confidence is shown only when ABC and Liblouis both produce comparable text.
@@ -209,22 +215,28 @@ The evaluation harness (`/quality`) scores the active engine with CER/WER. Sampl
 ### Validation commands
 
 ```bash
-npm run validate                    # aggregate: mvp + ai + demo + external-ocr
+npm run validate                    # aggregate: mvp + ai + demo + external/ABC/hybrid Braille contracts
 npm run validate:ai                 # AI/OCR behavioural guarantees (provider routing, fallbacks, caps, safety)
 npm run validate:mvp                # workflow/RBAC + AI/OCR presence & no-old-mock-calls checks
 npm run validate:demo               # demo-readiness: demo docs/resources present, gates & wording intact
 npm run validate:external-ocr       # external_braille_ocr contract + workflow gates via a local mock engine (boots its own app instance on port 3993 — stop any running `next dev` first; the real engine is NOT required)
 npm run validate:abc-braille        # ABC upload/scan/results contract + exact word-for-word persistence (local facsimile; no internet)
+npm run validate:liblouis           # installed Liblouis CLI + UEB Grade 2 back-translation
+npm run validate:openai:live        # OPTIONAL: live GPT-5.4 mini structured image check
+npm run validate:vision-workflows:live # OPTIONAL: live Assessment-Safe + STEM Server Action round trip
+npm run validate:braille-workflow:live # OPTIONAL: live ABC + Liblouis + GPT-5.4 mini Braille round trip
+npm run verify:neon                 # live Neon create/read/update/source-upload round trip
 npm run validate:external-ocr:live  # OPTIONAL: live check against the real standalone engine (start it separately on port 8000 with OCR_ENGINE_API_KEY=local-test-key)
 npm run typecheck
 npm run build
 ```
 
-Local persistence:
+Persistence:
 
 * Demo records are stored in `.insighted-data/db.json`.
 * Uploaded files are stored in `.insighted-data/uploads`.
-* These folders are ignored by git and intended for controlled demos, not production hosting.
+* When a Neon/Postgres URL is configured, Braille, Assessment-Safe, and STEM records plus portable source-image data are also persisted to Neon and hydrated on later requests/instances.
+* The local folders are ignored by git and remain a controlled-demo fallback.
 
 ## What To Try
 

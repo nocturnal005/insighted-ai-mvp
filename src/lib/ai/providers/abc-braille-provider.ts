@@ -62,11 +62,27 @@ function extractAction(html: string, pattern: RegExp, label: string): string {
 }
 
 function extractList(html: string, heading: string): string[] {
-  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const section = html.match(
-    new RegExp(`<h4[^>]*>\\s*${escapedHeading}\\s*</h4>\\s*<ol[^>]*>([\\s\\S]*?)</ol>`, "i"),
-  )?.[1];
-  if (!section) return [];
+  const headingPattern = /<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi;
+  let headingMatch: RegExpExecArray | null;
+  let lastHeading: RegExpExecArray | null = null;
+  while ((headingMatch = headingPattern.exec(html)) !== null) {
+    if (textFromHtml(headingMatch[2]).toLowerCase() === heading.toLowerCase()) {
+      lastHeading = headingMatch;
+    }
+  }
+  if (!lastHeading) return [];
+
+  // ABC's public HTML has changed its heading/layout wrappers over time. Start at the
+  // final matching result heading and accept only the nearest bounded ordered list.
+  const listWindow = html.slice(
+    lastHeading.index + lastHeading[0].length,
+    lastHeading.index + lastHeading[0].length + 8192,
+  );
+  const listOpen = /<ol[^>]*>/i.exec(listWindow);
+  if (!listOpen) return [];
+  const listBody = listWindow.slice(listOpen.index + listOpen[0].length);
+  const listEnd = listBody.search(/<\/ol\s*>|<h[1-6]\b/i);
+  const section = listEnd >= 0 ? listBody.slice(0, listEnd) : listBody;
 
   return Array.from(section.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi))
     .map((match) => textFromHtml(match[1]))
@@ -178,6 +194,20 @@ export async function transcribeBrailleWithAbc(input: BrailleOcrInput): Promise<
       });
       const resultHtml = await readHtml(resultResponse);
       const translatedLines = extractList(resultHtml, "Text translation");
+      if (process.env.ABC_BRAILLE_DEBUG === "true") {
+        const headings = Array.from(
+          resultHtml.matchAll(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi),
+        ).map((match) => ({ text: textFromHtml(match[1]), index: match.index }));
+        console.error("[ABC Braille adapter] result structure", {
+          status: resultResponse.status,
+          bytes: Buffer.byteLength(resultHtml),
+          headings,
+          orderedLists: Array.from(resultHtml.matchAll(/<ol\b/gi)).map(
+            (match) => match.index,
+          ),
+          translatedLines: translatedLines.length,
+        });
+      }
       if (!translatedLines.length) throw new Error("ABC Braille returned no text translation");
       const brailleLines = extractList(resultHtml, "Braille Scanned");
 
@@ -204,6 +234,12 @@ export async function transcribeBrailleWithAbc(input: BrailleOcrInput): Promise<
       clearTimeout(timeout);
     }
   } catch (error) {
+    if (process.env.ABC_BRAILLE_DEBUG === "true") {
+      console.error(
+        "[ABC Braille adapter]",
+        error instanceof Error ? error.message : "Unknown provider error",
+      );
+    }
     return fallback(timer, [specialistFlag, processingFailedFlag(safeErrorLabel(error))]);
   }
 }

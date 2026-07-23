@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getVisualTask, getTaskAudit, getTaskUpload } from "@/lib/data";
+import { hydrateVisualTask } from "@/lib/durable-demo";
 import { pupilLabel, userName } from "@/lib/store";
 import { sourcePreviewDataUrl } from "@/lib/source-preview";
 import { can } from "@/lib/rbac";
@@ -15,7 +16,9 @@ import { VisualWorkflow } from "./visual-workflow";
 export default async function VisualDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const user = await requireUser();
-  const task = getVisualTask(params.id);
+  const task =
+    (await hydrateVisualTask(params.id, { includeUploadData: true })) ??
+    getVisualTask(params.id);
   if (!task) notFound();
 
   const up = getTaskUpload(task.id);

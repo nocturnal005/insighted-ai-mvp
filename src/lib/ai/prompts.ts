@@ -13,8 +13,8 @@ import type {
 import { isAssessmentContext } from "./safety";
 
 export const PROMPT_VERSIONS = {
-  visual: "visual-description-v1",
-  stem: "stem-description-v1",
+  visual: "visual-description-v3",
+  stem: "stem-description-v2",
   brailleDraft: "braille-openai-draft-v1",
   brailleReview: "braille-hybrid-review-v1",
   mockBraille: "mock-braille-v1",
@@ -44,7 +44,13 @@ export function buildVisualPrompt(input: VisualDescriptionInput): string {
     "",
     "Rules: " + NEUTRALITY_RULES,
     assessment
-      ? "This is assessment use: be maximally conservative and flag anything that could hint at the answer."
+      ? [
+          "This is assessment use: be maximally conservative.",
+          "In neutralDescription, you may state that data marks, lines, bars or plotted points are present,",
+          "but OMIT their direction, relative height or length, start/end positions, numerical relationships,",
+          "shape, gradient, trend or comparison whenever that observation could help answer the question.",
+          "Put every omitted observation only in answerSensitiveFlags for staff review.",
+        ].join(" ")
       : "This is lesson/teaching use: still neutral, but orientation detail is acceptable.",
     "",
     "Return STRICT JSON only, matching exactly this shape:",

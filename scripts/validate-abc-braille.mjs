@@ -7,7 +7,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import http from "node:http";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -15,6 +15,12 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DATA_DIR = mkdtempSync(path.join(os.tmpdir(), "insighted-abc-"));
+const NEXT_DIST_DIR = `.next-validate-abc-${process.pid}`;
+const NEXT_TSCONFIG = `.tsconfig-validate-abc-${process.pid}.json`;
+writeFileSync(
+  path.join(ROOT, NEXT_TSCONFIG),
+  `${JSON.stringify({ extends: "./tsconfig.json" }, null, 2)}\n`,
+);
 const APP_PORT = 3994;
 const ABC_PORT = 8992;
 const BASE = `http://127.0.0.1:${APP_PORT}`;
@@ -64,11 +70,11 @@ function startAbcFacsimile(requests) {
       res.end(`
         <h4>Braille Scanned</h4><ol><li>⠠⠁</li><li>⠃</li></ol>
         <h4> Text translation</h4>
-        <ol>
+        <div class="result-panel"><ol>
           <li>Alpha &amp; beta</li>
           <li>Line two — exactly</li>
           <li>Quotes &quot;stay&quot; word for word.</li>
-        </ol>
+        </ol></div>
       `);
       return;
     }
@@ -105,6 +111,8 @@ function startApp() {
       DEMO_MODE: "true",
       ALLOW_REAL_PUPIL_DATA: "",
       INSIGHTED_DATA_DIR: DATA_DIR,
+      INSIGHTED_NEXT_DIST_DIR: NEXT_DIST_DIR,
+      INSIGHTED_TSCONFIG_PATH: NEXT_TSCONFIG,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -120,9 +128,12 @@ function stopApp(child) {
   else child.kill("SIGTERM");
 }
 
-async function waitForApp(timeoutMs = 180_000) {
+async function waitForApp(child, timeoutMs = 180_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(`app exited before becoming ready (code ${child.exitCode})`);
+    }
     try {
       if ((await fetch(`${BASE}/login`)).status === 200) return;
     } catch {
@@ -151,14 +162,12 @@ class Session {
     return fetch(`${BASE}${pathName}`, { redirect: "manual", headers: this.headers() });
   }
   async login() {
-    const page = await (await this.get("/login")).text();
-    const actionId = extractFormActionId(page, 'value="u_amelia"');
-    const form = new FormData();
-    form.set(`$ACTION_ID_${actionId}`, "");
-    form.set("userId", "u_amelia");
-    const response = await fetch(`${BASE}/login`, { method: "POST", redirect: "manual", body: form });
-    this.cookie = (response.headers.get("set-cookie") || "").split(";")[0];
-    if (response.status !== 303 || !this.cookie) throw new Error(`login failed (${response.status})`);
+    // The latency-optimised login card invokes its action from a Client Component, so
+    // there is no longer a server-rendered <form> action to scrape. The demo session
+    // cookie intentionally contains only the selected seeded user id.
+    this.cookie = "insighted_session=u_amelia";
+    const response = await this.get("/dashboard");
+    if (response.status !== 200) throw new Error(`demo session failed (${response.status})`);
     return this;
   }
   async createTask() {
@@ -192,8 +201,8 @@ class Session {
 
 function brailleActionIds() {
   for (const manifestPath of [
-    path.join(ROOT, ".next", "dev", "server", "server-reference-manifest.json"),
-    path.join(ROOT, ".next", "server", "server-reference-manifest.json"),
+    path.join(ROOT, NEXT_DIST_DIR, "dev", "server", "server-reference-manifest.json"),
+    path.join(ROOT, NEXT_DIST_DIR, "server", "server-reference-manifest.json"),
   ]) {
     if (!existsSync(manifestPath)) continue;
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -214,7 +223,7 @@ async function main() {
   const abc = await startAbcFacsimile(requests);
   const app = startApp();
   try {
-    await waitForApp();
+    await waitForApp(app);
     const session = await new Session().login();
     const taskPath = await session.createTask();
     const taskId = taskPath.split("/").pop();
@@ -271,6 +280,8 @@ async function main() {
     stopApp(app);
     abc.close();
     rmSync(DATA_DIR, { recursive: true, force: true });
+    rmSync(path.join(ROOT, NEXT_DIST_DIR), { recursive: true, force: true });
+    rmSync(path.join(ROOT, NEXT_TSCONFIG), { force: true });
   }
 
   console.log(failures.length ? `\n${failures.length}/${checks} CHECKS FAILED: ${failures.join("; ")}` : `\nALL ${checks} CHECKS PASSED`);

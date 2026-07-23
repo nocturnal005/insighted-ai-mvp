@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Plus, ImageIcon, ShieldCheck } from "lucide-react";
 import { getVisualTasks } from "@/lib/data";
+import { hydrateVisualTasks } from "@/lib/durable-demo";
 import { Card, CardBody } from "@/components/ui/card";
 import { TaskBadge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
@@ -12,7 +13,8 @@ const TIER_LABEL: Record<string, string> = {
   tier_2: "Tier 2 · Supported",
 };
 
-export default function AssessmentListPage() {
+export default async function AssessmentListPage() {
+  await hydrateVisualTasks();
   const tasks = getVisualTasks();
 
   return (

@@ -8,10 +8,17 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { TaskBadge } from "@/components/ui/badge";
 import { formatRelative } from "@/lib/utils";
 import type { TaskStatus } from "@/lib/types";
+import { hydrateBrailleTasks } from "@/lib/durable-braille";
+import { hydrateStemTasks, hydrateVisualTasks } from "@/lib/durable-demo";
 
 export default async function PupilDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   await requireUser();
+  await Promise.all([
+    hydrateBrailleTasks(),
+    hydrateVisualTasks(),
+    hydrateStemTasks(),
+  ]);
   const pupil = getPupil(params.id);
   if (!pupil) notFound();
   const work = getPupilWork(pupil.id);

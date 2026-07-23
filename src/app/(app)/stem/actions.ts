@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { db, id, recordAudit, createUpload, uploadDataUrl } from "@/lib/store";
 import { getStemTask, getTaskUpload } from "@/lib/data";
+import { hydrateStemTask, persistStemTask } from "@/lib/durable-demo";
 import { describeStemVisual, mapFlagsToAnswerSensitiveFlags, summariseFlags, toStoredFlags } from "@/lib/ai";
 import { assertVisionImageUpload } from "@/lib/upload-guard";
 import type { DescriptionStyle, StemTask, VisualType } from "@/lib/types";
@@ -22,11 +23,9 @@ export async function createStemTask(formData: FormData) {
   const style = String(formData.get("style") || "descriptive") as DescriptionStyle;
   const file = formData.get("image") as File | null;
   if (!title) throw new Error("Title is required");
-  let uploadBuffer: Buffer | null = null;
-  if (file && file.size > 0) {
-    assertVisionImageUpload(file);
-    uploadBuffer = Buffer.from(await file.arrayBuffer());
-  }
+  if (!file || file.size === 0) throw new Error("A STEM visual is required");
+  assertVisionImageUpload(file);
+  const uploadBuffer = Buffer.from(await file.arrayBuffer());
 
   const now = new Date().toISOString();
   const task: StemTask = {
@@ -45,16 +44,14 @@ export async function createStemTask(formData: FormData) {
   db.stemTasks.unshift(task);
 
   // Store the upload (if any) and capture its bytes to feed the vision provider.
-  let dataUrl: string | undefined;
-  if (file && uploadBuffer) {
-    task.uploadId = createUpload({
-      taskId: task.id, module: "stem", fileName: file.name, fileType: file.type,
-      byteSize: file.size, data: uploadBuffer, uploadedBy: user,
-    });
-    dataUrl = `data:${file.type};base64,${uploadBuffer.toString("base64")}`;
-  }
+  task.uploadId = createUpload({
+    taskId: task.id, module: "stem", fileName: file.name, fileType: file.type,
+    byteSize: file.size, data: uploadBuffer, uploadedBy: user,
+  });
+  const dataUrl = `data:${file.type};base64,${uploadBuffer.toString("base64")}`;
 
   await generateStemDescription(user, task, dataUrl, task.style);
+  await persistStemTask(task, { includeUploadData: true });
 
   redirect(`/stem/${task.id}`);
 }
@@ -125,7 +122,9 @@ async function generateStemDescription(
 export async function restyleStem(taskId: string, style: DescriptionStyle) {
   const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
-  const task = getStemTask(taskId);
+  const task =
+    (await hydrateStemTask(taskId, { includeUploadData: true })) ??
+    getStemTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked");
 
@@ -133,6 +132,7 @@ export async function restyleStem(taskId: string, style: DescriptionStyle) {
   const upload = getTaskUpload(task.id);
   const dataUrl = upload ? uploadDataUrl(upload) : undefined;
   await generateStemDescription(user, task, dataUrl || undefined, style);
+  await persistStemTask(task);
   revalidatePath(`/stem/${taskId}`);
 }
 
@@ -140,7 +140,9 @@ export async function restyleStem(taskId: string, style: DescriptionStyle) {
 export async function rerunStemDescription(taskId: string) {
   const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
-  const task = getStemTask(taskId);
+  const task =
+    (await hydrateStemTask(taskId, { includeUploadData: true })) ??
+    getStemTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked. An admin must reopen it to re-run.");
 
@@ -149,13 +151,14 @@ export async function rerunStemDescription(taskId: string) {
   const upload = getTaskUpload(task.id);
   const dataUrl = upload ? uploadDataUrl(upload) : undefined;
   await generateStemDescription(user, task, dataUrl || undefined, task.style, reason);
+  await persistStemTask(task);
   revalidatePath(`/stem/${taskId}`);
 }
 
 export async function updateStem(taskId: string, editedDescription: string) {
   const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
-  const task = getStemTask(taskId);
+  const task = (await hydrateStemTask(taskId)) ?? getStemTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked");
 
@@ -170,13 +173,14 @@ export async function updateStem(taskId: string, editedDescription: string) {
     objectLabel: task.title,
     taskId: task.id,
   });
+  await persistStemTask(task);
   revalidatePath(`/stem/${taskId}`);
 }
 
 export async function approveStem(taskId: string, editedDescription?: string) {
   const user = await requireUser();
   if (!can(user.role, "stem.approve")) throw new Error("Only a teacher or QTVI can approve");
-  const task = getStemTask(taskId);
+  const task = (await hydrateStemTask(taskId)) ?? getStemTask(taskId);
   if (!task) throw new Error("Not found");
   const reviewedDescription = String(editedDescription ?? task.editedDescription).trim();
   if (!reviewedDescription) throw new Error("A reviewed description is required");
@@ -202,5 +206,6 @@ export async function approveStem(taskId: string, editedDescription?: string) {
     previousStatus,
     newStatus: task.status,
   });
+  await persistStemTask(task);
   revalidatePath(`/stem/${taskId}`);
 }

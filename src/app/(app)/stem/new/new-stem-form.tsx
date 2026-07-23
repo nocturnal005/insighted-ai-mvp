@@ -88,12 +88,12 @@ export function NewStemForm({ pupils }: { pupils: { id: string; label: string }[
           </div>
 
           <div>
-            <label htmlFor="image" className="mb-1.5 block text-sm font-medium text-zinc-700">Visual</label>
+            <label htmlFor="image" className="mb-1.5 block text-sm font-medium text-zinc-700">Visual <span className="text-critical-600">*</span></label>
             <label htmlFor="image" className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 px-4 py-9 text-center transition-colors hover:border-accent-300 hover:bg-accent-50/30">
               <Upload className="h-6 w-6 text-zinc-400" />
               <span className="mt-2 text-sm text-zinc-700">{fileName ?? "Click to choose an image"}</span>
-              <span className="mt-0.5 text-xs text-zinc-400">PNG or JPEG · optional for this demo</span>
-              <input id="image" name="image" type="file" accept="image/png,image/jpeg" className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
+              <span className="mt-0.5 text-xs text-zinc-400">PNG or JPEG · required</span>
+              <input id="image" name="image" type="file" accept="image/png,image/jpeg" required className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
             </label>
           </div>
 

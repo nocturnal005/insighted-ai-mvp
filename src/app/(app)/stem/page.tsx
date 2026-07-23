@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Layers } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getStemTasks } from "@/lib/data";
+import { hydrateStemTasks } from "@/lib/durable-demo";
 import { pupilLabel } from "@/lib/store";
 import { VISUAL_TYPE_LABELS } from "@/lib/braille-engine";
 import { Card, CardBody } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { formatRelative } from "@/lib/utils";
 
 export default async function StemListPage() {
   await requireUser();
+  await hydrateStemTasks();
   const tasks = getStemTasks();
 
   return (

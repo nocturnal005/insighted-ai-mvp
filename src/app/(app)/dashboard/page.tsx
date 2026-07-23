@@ -10,6 +10,7 @@ import { TaskBadge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { formatRelative } from "@/lib/utils";
 import { hydrateBrailleTasks } from "@/lib/durable-braille";
+import { hydrateStemTasks, hydrateVisualTasks } from "@/lib/durable-demo";
 
 export default async function DashboardPage() {
   // Only the greeting needs the user, and that is an in-memory lookup, so the shell paints
@@ -44,7 +45,11 @@ export default async function DashboardPage() {
  * hydrate streams in behind a skeleton instead of blocking the whole dashboard render.
  */
 async function DashboardOverview() {
-  await hydrateBrailleTasks();
+  await Promise.all([
+    hydrateBrailleTasks(),
+    hydrateVisualTasks(),
+    hydrateStemTasks(),
+  ]);
   const stats = getDashboardStats();
 
   return (

@@ -4,6 +4,7 @@ import { can } from "@/lib/rbac";
 import { buildExport, docToPlainText, isExportKind } from "@/lib/export-content";
 import { markExported } from "@/lib/export-record";
 import { hydrateBrailleTask } from "@/lib/durable-braille";
+import { hydrateStemTask, hydrateVisualTask } from "@/lib/durable-demo";
 
 // Reads the demo session cookie — never statically cached.
 export const dynamic = "force-dynamic";
@@ -21,6 +22,8 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
   const kind = new URL(request.url).searchParams.get("kind");
   if (!isExportKind(kind)) return NextResponse.json({ error: "Invalid or missing export kind" }, { status: 400 });
   if (kind === "transcription" || kind === "feedback") await hydrateBrailleTask(params.id);
+  else if (kind === "visual") await hydrateVisualTask(params.id);
+  else await hydrateStemTask(params.id);
 
   const { doc, error } = buildExport(kind, params.id);
   if (error || !doc) return NextResponse.json({ error: error ?? "Not found" }, { status: 409 });

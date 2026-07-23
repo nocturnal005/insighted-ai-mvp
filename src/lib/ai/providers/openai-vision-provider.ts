@@ -46,11 +46,7 @@ import { assessmentContextFlags, safeErrorLabel, sanitizeProviderText, truncateT
 const PROVIDER = "openai";
 /** Never store/display more than this many provider flags, however many are returned. */
 const MAX_FLAGS = 20;
-/**
- * Best-effort determinism. OpenAI treats `seed` as a hint, but combined with temperature 0 it
- * makes repeated runs of the same image + prompt far more likely to return identical text,
- * directly reducing the run-to-run drift reviewers were seeing.
- */
+/** Best-effort determinism for non-reasoning models. */
 const VISION_SEED = 20260723;
 
 const KNOWN_CATEGORIES: UncertaintyCategory[] = [
@@ -218,13 +214,24 @@ function imageContent(input: { dataUrl?: string; imageUrl?: string }): VisionIma
   return { type: "image_url", image_url: { url, detail: "high" } };
 }
 
+/**
+ * GPT-5 reasoning models use reasoning controls and do not accept every legacy sampling
+ * parameter. Keeping the request shape model-aware lets the configured GPT-5.4 mini model
+ * run without an unsupported temperature/seed error while preserving deterministic
+ * sampling for older vision models.
+ */
+function generationControls(model: string) {
+  return model.startsWith("gpt-5")
+    ? { reasoning_effort: "none" as const }
+    : { temperature: 0, seed: VISION_SEED };
+}
+
 async function callVisionJson(system: string, image: VisionImagePart, model: string): Promise<unknown> {
   const client = getClient();
   if (!client) throw new Error("no_client");
   const completion = await client.chat.completions.create({
     model,
-    temperature: 0,
-    seed: VISION_SEED,
+    ...generationControls(model),
     max_completion_tokens: 6000,
     response_format: { type: "json_object" },
     messages: [
@@ -254,8 +261,7 @@ async function parseVisionJson<S extends z.ZodType>(
   if (!client) throw new Error("no_client");
   const completion = await client.chat.completions.parse({
     model,
-    temperature: 0,
-    seed: VISION_SEED,
+    ...generationControls(model),
     max_completion_tokens: 6000,
     response_format: zodResponseFormat(schema, schemaName),
     messages: [
@@ -335,7 +341,7 @@ export async function reviewBrailleWithOpenAI(
   try {
     const completion = await client.chat.completions.parse({
       model,
-      temperature: 0,
+      ...generationControls(model),
       max_completion_tokens: 6000,
       response_format: zodResponseFormat(brailleReviewSchema, "braille_discrepancy_review"),
       messages: [

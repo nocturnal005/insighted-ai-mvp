@@ -8,7 +8,7 @@ import { db, id, recordAudit, createUpload, recordCorrection, uploadDataUrl } fr
 import { getTaskUpload, getPupil } from "@/lib/data";
 import { hydrateBrailleTask, persistBrailleTask } from "@/lib/durable-braille";
 import { transcribeBraille, mapFlagsToLowConfidenceRegions, summariseFlags, toStoredFlags } from "@/lib/ai";
-import { assertValidUpload } from "@/lib/upload-guard";
+import { assertVisionImageUpload } from "@/lib/upload-guard";
 import { generateFeedback } from "@/lib/feedback";
 import type { BrailleTask } from "@/lib/types";
 
@@ -21,11 +21,9 @@ export async function createBrailleTask(formData: FormData) {
   const pupilId = String(formData.get("pupilId") || "") || null;
   const file = formData.get("image") as File | null;
   if (!title) throw new Error("Title is required");
-  let uploadBuffer: Buffer | null = null;
-  if (file && file.size > 0) {
-    assertValidUpload(file);
-    uploadBuffer = Buffer.from(await file.arrayBuffer());
-  }
+  if (!file || file.size === 0) throw new Error("A Braille work image is required");
+  assertVisionImageUpload(file);
+  const uploadBuffer = Buffer.from(await file.arrayBuffer());
 
   const now = new Date().toISOString();
   const task: BrailleTask = {
@@ -34,7 +32,7 @@ export async function createBrailleTask(formData: FormData) {
     title,
     subject,
     pupilId,
-    status: file && file.size > 0 ? "ready_for_transcription" : "draft",
+    status: "ready_for_transcription",
     createdBy: user.id,
     assignedTo: user.id,
     uploadId: null,
@@ -57,19 +55,17 @@ export async function createBrailleTask(formData: FormData) {
     newStatus: task.status,
   });
 
-  if (file && uploadBuffer) {
-    task.uploadId = createUpload({
-      taskId: task.id,
-      module: "braille",
-      fileName: file.name,
-      fileType: file.type,
-      byteSize: file.size,
-      data: uploadBuffer,
-      uploadedBy: user,
-    });
-  }
+  task.uploadId = createUpload({
+    taskId: task.id,
+    module: "braille",
+    fileName: file.name,
+    fileType: file.type,
+    byteSize: file.size,
+    data: uploadBuffer,
+    uploadedBy: user,
+  });
 
-  await persistBrailleTask(task);
+  await persistBrailleTask(task, { includeUploadData: true });
   redirect(`/braille/${task.id}`);
 }
 
@@ -165,7 +161,7 @@ async function executeTranscription(
     flagSummary: summariseFlags(result.flags),
     reason: reason ?? null,
   });
-  await persistBrailleTask(task);
+  await persistBrailleTask(task, { includeUploadData: true });
   revalidatePath(`/braille/${task.id}`);
 }
 

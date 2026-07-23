@@ -17,11 +17,15 @@
     "validate:abc-braille": "node scripts/validate-abc-braille.mjs",
     "validate:hybrid-braille": "node scripts/validate-hybrid-braille.mjs",
     "validate:liblouis": "node scripts/validate-liblouis.mjs",
+    "validate:openai:live": "node scripts/validate-openai-vision-live.mjs",
+    "validate:vision-workflows:live": "node scripts/validate-vision-workflows-live.mjs",
+    "validate:braille-workflow:live": "node scripts/validate-braille-workflow-live.mjs",
     "setup:liblouis": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-liblouis.ps1",
     "validate:external-ocr:live": "node scripts/validate-external-ocr-live.mjs",
     "verify:neon": "node scripts/verify-neon-persistence.mjs",
     "seed": "node scripts/reset-demo.mjs",
-    "reset:demo": "node scripts/reset-demo.mjs"
+    "reset:demo": "node scripts/reset-demo.mjs",
+    "generate:demo-fixtures": "node scripts/generate-demo-fixtures.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

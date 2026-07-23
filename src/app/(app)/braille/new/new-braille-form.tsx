@@ -54,7 +54,7 @@ export function NewBrailleForm({ pupils }: { pupils: { id: string; label: string
             </Field>
           </div>
 
-          <Field label="Braille work image" htmlFor="image">
+          <Field label="Braille work image" htmlFor="image" required>
             <label
               htmlFor="image"
               className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50/50 px-4 py-9 text-center transition-colors hover:border-accent-300 hover:bg-accent-50/30"
@@ -69,6 +69,7 @@ export function NewBrailleForm({ pupils }: { pupils: { id: string; label: string
                 name="image"
                 type="file"
                 accept="image/png,image/jpeg"
+                required
                 className="sr-only"
                 onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
               />

@@ -9,6 +9,7 @@ const mustExist = [
   "src/lib/ai/providers/braille-translation-provider.ts",
   "src/lib/ai/providers/mock-provider.ts",
   "src/lib/source-preview.ts",
+  "src/lib/durable-demo.ts",
 ];
 
 // Positive checks: each file must contain each string.
@@ -27,7 +28,7 @@ const checks = [
   },
   {
     file: ".env.example",
-    mustContain: ["AI_MODE", "OPENAI_API_KEY", "BRAILLE_OCR_PROVIDER", "BRAILLE_OCR_ENDPOINT", "ALLOW_REAL_PUPIL_DATA"],
+    mustContain: ["AI_MODE", "OPENAI_API_KEY", "gpt-5.4-mini", "BRAILLE_OCR_PROVIDER", "BRAILLE_OCR_ENDPOINT", "DATABASE_URL", "ALLOW_REAL_PUPIL_DATA"],
   },
   {
     file: "src/lib/ai/index.ts",
@@ -45,11 +46,11 @@ const checks = [
   },
   {
     file: "src/app/(app)/assessment/actions.ts",
-    mustContain: ["describeVisual", "ai.visual_description.run"],
+    mustContain: ["describeVisual", "ai.visual_description.run", "persistVisualTask", "hydrateVisualTask"],
   },
   {
     file: "src/app/(app)/stem/actions.ts",
-    mustContain: ["describeStemVisual", "ai.stem_description.run"],
+    mustContain: ["describeStemVisual", "ai.stem_description.run", "persistStemTask", "hydrateStemTask"],
   },
   {
     file: "src/app/(app)/quality/actions.ts",
@@ -108,6 +109,20 @@ const checks = [
   {
     file: "src/lib/store.ts",
     mustContain: [".insighted-data", "purgeExpiredUploads", "storagePath"],
+  },
+  {
+    file: "src/lib/durable-demo.ts",
+    mustContain: [
+      "insighted_demo_records",
+      "persistVisualTask",
+      "persistStemTask",
+      "hydrateDemoUpload",
+      "storagePath: \"\"",
+    ],
+  },
+  {
+    file: "src/lib/durable-braille.ts",
+    mustContain: ["portableUpload", "includeUploadData", "NEON_DATABASE_URL"],
   },
   {
     file: "src/lib/source-preview.ts",
