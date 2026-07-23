@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { ScanText, Clock, CheckCircle2, XCircle, Plus, ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/session";
@@ -11,9 +12,10 @@ import { formatRelative } from "@/lib/utils";
 import { hydrateBrailleTasks } from "@/lib/durable-braille";
 
 export default async function DashboardPage() {
-  await hydrateBrailleTasks();
+  // Only the greeting needs the user, and that is an in-memory lookup, so the shell paints
+  // immediately. The Braille counts require a Neon read (hydrateBrailleTasks); that work is
+  // deferred into the Suspense boundary below so it never blocks the first response.
   const user = await requireUser();
-  const stats = getDashboardStats();
 
   return (
     <>
@@ -30,6 +32,23 @@ export default async function DashboardPage() {
         }
       />
 
+      <Suspense fallback={<DashboardOverviewSkeleton />}>
+        <DashboardOverview />
+      </Suspense>
+    </>
+  );
+}
+
+/**
+ * Task counts + recent activity. Isolated in its own async component so its Neon-backed
+ * hydrate streams in behind a skeleton instead of blocking the whole dashboard render.
+ */
+async function DashboardOverview() {
+  await hydrateBrailleTasks();
+  const stats = getDashboardStats();
+
+  return (
+    <>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat icon={ScanText} label="Active tasks" value={stats.active} />
         <Stat icon={Clock} label="Awaiting review" value={stats.awaitingReview} tone="caution" />
@@ -68,6 +87,20 @@ export default async function DashboardPage() {
           </ul>
         )}
       </Card>
+    </>
+  );
+}
+
+/** Skeleton for the stat grid + recent card, shown while the Neon read resolves. */
+function DashboardOverviewSkeleton() {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="h-28 animate-pulse rounded-2xl bg-white shadow-subtle" />
+        ))}
+      </div>
+      <div className="mt-6 h-64 animate-pulse rounded-2xl bg-white shadow-subtle" />
     </>
   );
 }
