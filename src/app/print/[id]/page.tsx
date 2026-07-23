@@ -5,6 +5,7 @@ import { buildExport, isExportKind } from "@/lib/export-content";
 import { markExported } from "@/lib/export-record";
 import { PrintActions } from "./print-actions";
 import { hydrateBrailleTask } from "@/lib/durable-braille";
+import { hydrateStemTask, hydrateVisualTask } from "@/lib/durable-demo";
 
 // Reads the demo session and stamps an export (audit side effect) — always per-request.
 export const dynamic = "force-dynamic";
@@ -25,6 +26,8 @@ export default async function PrintPage(
   const kind = searchParams.kind;
   if (!isExportKind(kind) || !can(user.role, "export")) notFound();
   if (kind === "transcription" || kind === "feedback") await hydrateBrailleTask(params.id);
+  else if (kind === "visual") await hydrateVisualTask(params.id);
+  else await hydrateStemTask(params.id);
 
   const { doc, error } = buildExport(kind, params.id);
   if (error || !doc) {

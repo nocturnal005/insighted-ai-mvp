@@ -8,6 +8,8 @@ Local, non-committed test files used to demonstrate and validate InsightEd AI in
 
 This folder holds the source files a presenter uploads while running the [demo test matrix](../docs/demo-test-matrix.md) and the [client demo script](../docs/client-demo-script.md). **The files themselves are never committed** — a `.gitignore` in this folder keeps only the structure (`.gitkeep`) and this README. Drop your own synthetic files into the subfolders locally.
 
+Run `npm run generate:demo-fixtures` to create the standard pupil-free assets. It produces an embossed-style UEB “hello world” page for the live ABC/Liblouis/OpenAI check and a labelled synthetic line graph for Assessment-Safe and STEM checks.
+
 ## What each folder is for
 
 | Folder | Use it for | Suggested file types |

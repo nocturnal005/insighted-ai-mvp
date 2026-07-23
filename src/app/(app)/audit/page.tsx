@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { formatRelative } from "@/lib/utils";
 import { isPrivateProviderIdentity } from "@/lib/ai/provider-visibility";
+import { hydrateBrailleTasks } from "@/lib/durable-braille";
+import { hydrateStemTasks, hydrateVisualTasks } from "@/lib/durable-demo";
 
 const ACTION_LABEL: Record<string, string> = {
   "task.create": "created a task",
@@ -46,6 +48,11 @@ export default async function AuditPage() {
   const user = await requireUser();
   if (!can(user.role, "audit.read")) redirect("/dashboard");
 
+  await Promise.all([
+    hydrateBrailleTasks(),
+    hydrateVisualTasks(),
+    hydrateStemTasks(),
+  ]);
   const entries = getAudit();
 
   return (

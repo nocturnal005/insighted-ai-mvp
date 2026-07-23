@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/session";
 import { getTaskUpload } from "@/lib/data";
 import { hydrateBrailleUpload } from "@/lib/durable-braille";
+import { hydrateDemoUpload } from "@/lib/durable-demo";
 import { uploadBytes } from "@/lib/store";
 import sharp from "sharp";
 
@@ -17,7 +18,9 @@ export async function GET(request: Request, props: { params: Promise<{ taskId: s
   // Durable Braille detail hydration intentionally keeps binary data out of the
   // document response. Fetch it only when the browser actually requests the image.
   if (!bytes) {
-    upload = await hydrateBrailleUpload(params.taskId);
+    upload =
+      (await hydrateDemoUpload(params.taskId)) ??
+      (await hydrateBrailleUpload(params.taskId));
     bytes = upload ? uploadBytes(upload) : null;
   }
 

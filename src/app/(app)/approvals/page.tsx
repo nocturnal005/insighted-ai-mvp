@@ -4,11 +4,18 @@ import { requireUser } from "@/lib/session";
 import { getApprovalQueue } from "@/lib/data";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
+import { hydrateBrailleTasks } from "@/lib/durable-braille";
+import { hydrateStemTasks, hydrateVisualTasks } from "@/lib/durable-demo";
 
 const KIND_ICON = { braille: ScanText, visual: ImageIcon, stem: Layers } as const;
 
 export default async function ApprovalsPage() {
   await requireUser();
+  await Promise.all([
+    hydrateBrailleTasks(),
+    hydrateVisualTasks(),
+    hydrateStemTasks(),
+  ]);
   const items = getApprovalQueue();
 
   return (

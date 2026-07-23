@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getStemTask, getTaskAudit, getTaskUpload } from "@/lib/data";
+import { hydrateStemTask } from "@/lib/durable-demo";
 import { pupilLabel, userName } from "@/lib/store";
 import { sourcePreviewDataUrl } from "@/lib/source-preview";
 import { can } from "@/lib/rbac";
@@ -15,7 +16,9 @@ import { StemWorkflow } from "./stem-workflow";
 export default async function StemDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const user = await requireUser();
-  const task = getStemTask(params.id);
+  const task =
+    (await hydrateStemTask(params.id, { includeUploadData: true })) ??
+    getStemTask(params.id);
   if (!task) notFound();
 
   const up = getTaskUpload(task.id);

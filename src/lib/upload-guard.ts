@@ -15,9 +15,9 @@ export function assertValidUpload(file: File): void {
 
 /**
  * Stricter guard for the vision-based sections (Assessment-Safe, STEM). These send the upload
- * straight to an image model, which cannot read a PDF, so a PDF here would silently produce an
- * empty or garbage description. Reject it with a clear, actionable message instead. The Braille
- * module keeps PDF because its OCR pipeline treats documents differently.
+ * straight to an image model or image OCR provider, which cannot read a PDF in this build, so a
+ * PDF here would silently produce an empty or garbage result. Reject it with a clear, actionable
+ * message instead.
  */
 export function assertVisionImageUpload(file: File): void {
   assertValidUpload(file);

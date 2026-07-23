@@ -24,7 +24,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import http from "node:http";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -33,6 +33,12 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Isolated throwaway store so validation never touches the local demo data.
 const DATA_DIR = mkdtempSync(path.join(os.tmpdir(), "insighted-guardrail-"));
+const NEXT_DIST_DIR = `.next-validate-external-${process.pid}`;
+const NEXT_TSCONFIG = `.tsconfig-validate-external-${process.pid}.json`;
+writeFileSync(
+  path.join(ROOT, NEXT_TSCONFIG),
+  `${JSON.stringify({ extends: "./tsconfig.json" }, null, 2)}\n`,
+);
 const APP_PORT = 3993;
 const MOCK_PORT = 8991;
 const BASE = `http://127.0.0.1:${APP_PORT}`;
@@ -110,7 +116,7 @@ function startMockEngine() {
 // ── App instance ─────────────────────────────────────────────────────────────
 function startApp() {
   const nextBin = path.join(ROOT, "node_modules", "next", "dist", "bin", "next");
-  const child = spawn(process.execPath, [nextBin, "dev", "-p", String(APP_PORT)], {
+  const child = spawn(process.execPath, [nextBin, "dev", "--webpack", "-p", String(APP_PORT)], {
     cwd: ROOT,
     env: {
       ...process.env,
@@ -123,12 +129,19 @@ function startApp() {
       DEMO_MODE: "true",
       ALLOW_REAL_PUPIL_DATA: "", // never needed: guardrail tasks are not pupil-linked
       INSIGHTED_DATA_DIR: DATA_DIR, // isolated throwaway store (never the demo data)
+      INSIGHTED_NEXT_DIST_DIR: NEXT_DIST_DIR,
+      INSIGHTED_TSCONFIG_PATH: NEXT_TSCONFIG,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
-  child.stdout.on("data", () => {});
-  child.stderr.on("data", () => {});
+  let output = "";
+  const collect = (chunk) => {
+    output = `${output}${chunk.toString("utf8")}`.slice(-8000);
+  };
+  child.stdout.on("data", collect);
+  child.stderr.on("data", collect);
+  child.validationOutput = () => output;
   return child;
 }
 
@@ -141,9 +154,14 @@ function stopApp(child) {
   }
 }
 
-async function waitForApp(timeoutMs = 180_000) {
+async function waitForApp(child, timeoutMs = 180_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(
+        `app exited before becoming ready (code ${child.exitCode})\n${child.validationOutput()}`,
+      );
+    }
     try {
       const r = await fetch(`${BASE}/login`, { redirect: "manual" });
       if (r.status === 200) return;
@@ -152,7 +170,7 @@ async function waitForApp(timeoutMs = 180_000) {
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error(`app did not become ready on ${BASE}`);
+  throw new Error(`app did not become ready on ${BASE}\n${child.validationOutput()}`);
 }
 
 // ── Role-scoped HTTP sessions (real server actions, real cookies) ───────────
@@ -180,21 +198,11 @@ class Session {
   }
 
   async login(userId) {
-    const page = await (await this.get("/login")).text();
-    const actionId = extractFormActionId(page, `value="${userId}"`);
-    const form = new FormData();
-    form.set(`$ACTION_ID_${actionId}`, "");
-    form.set("userId", userId);
-    const r = await fetch(`${BASE}/login`, {
-      method: "POST",
-      redirect: "manual",
-      headers: this.headers(),
-      body: form,
-    });
-    const setCookie = r.headers.getSetCookie?.() ?? [r.headers.get("set-cookie")].filter(Boolean);
-    const session = setCookie.map((c) => c.split(";")[0]).find((c) => c.startsWith("insighted_session="));
-    if (r.status !== 303 || !session) throw new Error(`login failed for ${userId} (${r.status})`);
-    this.cookie = session;
+    // Login cards now invoke a Client Component action, so no server-rendered form
+    // action exists to scrape. Demo authentication intentionally stores the seeded id.
+    this.cookie = `insighted_session=${userId}`;
+    const r = await this.get("/dashboard");
+    if (r.status !== 200) throw new Error(`login failed for ${userId} (${r.status})`);
     return this;
   }
 
@@ -241,8 +249,8 @@ class Session {
 /** Braille server-action ids from the dev-compiled module (name -> id). */
 function brailleActionIds() {
   for (const manifestPath of [
-    path.join(ROOT, ".next", "dev", "server", "server-reference-manifest.json"),
-    path.join(ROOT, ".next", "server", "server-reference-manifest.json"),
+    path.join(ROOT, NEXT_DIST_DIR, "dev", "server", "server-reference-manifest.json"),
+    path.join(ROOT, NEXT_DIST_DIR, "server", "server-reference-manifest.json"),
   ]) {
     if (!existsSync(manifestPath)) continue;
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -267,7 +275,7 @@ async function main() {
 
   try {
     process.stdout.write("booting app instance (first compile can take a minute)... ");
-    await waitForApp();
+    await waitForApp(app);
     console.log("ready");
 
     const ta = await new Session().login("u_amelia");
@@ -435,6 +443,8 @@ async function main() {
     mock.close();
     try {
       rmSync(DATA_DIR, { recursive: true, force: true });
+      rmSync(path.join(ROOT, NEXT_DIST_DIR), { recursive: true, force: true });
+      rmSync(path.join(ROOT, NEXT_TSCONFIG), { force: true });
     } catch {
       /* best-effort cleanup of the throwaway store */
     }

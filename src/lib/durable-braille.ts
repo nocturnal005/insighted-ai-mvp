@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { db } from "@/lib/store";
+import { db, uploadDataUrl } from "@/lib/store";
 import type { AuditEntry, BrailleTask, CorrectionPair, Upload } from "@/lib/types";
 
 interface StoredBrailleTaskRow {
@@ -16,7 +16,12 @@ interface StoredBrailleDetailRow extends StoredBrailleTaskRow {
 const schemaPromiseKey = "__insighted_braille_schema";
 
 function databaseUrl(): string | null {
-  return process.env.DATABASE_URL || process.env.POSTGRES_URL || null;
+  return (
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.NEON_DATABASE_URL ||
+    null
+  );
 }
 
 function client() {
@@ -91,16 +96,27 @@ function mergeRecord(row: StoredBrailleDetailRow): BrailleTask {
   return task;
 }
 
+function portableUpload(taskId: string): Upload | null {
+  const upload = [...db.uploads].reverse().find((item) => item.taskId === taskId);
+  if (!upload) return null;
+  const dataUrl = uploadDataUrl(upload);
+  if (!dataUrl) return null;
+  return { ...upload, storagePath: "", dataUrl };
+}
+
 /** Persist one complete Braille OCR/review record, including its source image and audit. */
-export async function persistBrailleTask(task: BrailleTask): Promise<void> {
+export async function persistBrailleTask(
+  task: BrailleTask,
+  options: { includeUploadData?: boolean } = {},
+): Promise<void> {
   const sql = client();
   if (!sql) return;
   await ensureSchema();
 
-  const upload = [...db.uploads].reverse().find((item) => item.taskId === task.id) ?? null;
-  // Detail hydration intentionally omits inline base64 bytes. Passing SQL NULL here
-  // preserves the existing durable upload during text-only edits and approvals.
-  const uploadJson = upload?.dataUrl || upload?.storagePath ? JSON.stringify(upload) : null;
+  // Store portable bytes only on creation/OCR runs. Passing SQL NULL for later
+  // text-only edits preserves the existing durable upload without re-sending it.
+  const upload = options.includeUploadData ? portableUpload(task.id) : null;
+  const uploadJson = upload ? JSON.stringify(upload) : null;
   const audit = db.audit.filter((item) => item.taskId === task.id);
   const corrections = db.corrections.filter((item) => item.taskId === task.id);
 

@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/session";
 import { can } from "@/lib/rbac";
 import { db, id, recordAudit, createUpload, uploadDataUrl } from "@/lib/store";
 import { getVisualTask, getTaskUpload } from "@/lib/data";
+import { hydrateVisualTask, persistVisualTask } from "@/lib/durable-demo";
 import { describeVisual, mapFlagsToAnswerSensitiveFlags, summariseFlags, toStoredFlags } from "@/lib/ai";
 import { assertVisionImageUpload } from "@/lib/upload-guard";
 import { hasCompleteAssessmentContext, isAssessmentLikeContext, parseAssessmentContext } from "@/lib/assessment-context";
@@ -57,6 +58,7 @@ export async function createVisualTask(formData: FormData) {
 
   // Generate the neutral, assessment-safe description from the image + assessment context.
   await generateVisualDescription(user, task, dataUrl);
+  await persistVisualTask(task, { includeUploadData: true });
 
   redirect(`/assessment/${task.id}`);
 }
@@ -135,7 +137,9 @@ async function generateVisualDescription(
 export async function updateVisualContext(taskId: string, formData: FormData) {
   const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
-  const task = getVisualTask(taskId);
+  const task =
+    (await hydrateVisualTask(taskId, { includeUploadData: true })) ??
+    getVisualTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked");
 
@@ -164,6 +168,7 @@ export async function updateVisualContext(taskId: string, formData: FormData) {
   const upload = getTaskUpload(task.id);
   const dataUrl = upload ? uploadDataUrl(upload) : undefined;
   await generateVisualDescription(user, task, dataUrl || undefined, "Regenerated after assessment-context edit");
+  await persistVisualTask(task);
   revalidatePath(`/assessment/${taskId}`);
 }
 
@@ -171,7 +176,9 @@ export async function updateVisualContext(taskId: string, formData: FormData) {
 export async function rerunVisualDescription(taskId: string) {
   const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
-  const task = getVisualTask(taskId);
+  const task =
+    (await hydrateVisualTask(taskId, { includeUploadData: true })) ??
+    getVisualTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked. An admin must reopen it to re-run.");
 
@@ -180,13 +187,14 @@ export async function rerunVisualDescription(taskId: string) {
   const upload = getTaskUpload(task.id);
   const dataUrl = upload ? uploadDataUrl(upload) : undefined;
   await generateVisualDescription(user, task, dataUrl || undefined, reason);
+  await persistVisualTask(task);
   revalidatePath(`/assessment/${taskId}`);
 }
 
 export async function updateVisual(taskId: string, editedDescription: string, hintTier: HintTier) {
   const user = await requireUser();
   if (!can(user.role, "description.edit")) throw new Error("Not permitted to edit descriptions");
-  const task = getVisualTask(taskId);
+  const task = (await hydrateVisualTask(taskId)) ?? getVisualTask(taskId);
   if (!task) throw new Error("Not found");
   if (task.status === "approved") throw new Error("Approved and locked");
 
@@ -202,13 +210,16 @@ export async function updateVisual(taskId: string, editedDescription: string, hi
     objectLabel: task.title,
     taskId: task.id,
   });
+  await persistVisualTask(task);
   revalidatePath(`/assessment/${taskId}`);
 }
 
 export async function approveVisual(taskId: string, editedDescription?: string, hintTier?: HintTier) {
   const user = await requireUser();
   if (!can(user.role, "visual.approve")) throw new Error("Only a teacher or QTVI can approve");
-  const task = getVisualTask(taskId);
+  const task =
+    (await hydrateVisualTask(taskId, { includeUploadData: true })) ??
+    getVisualTask(taskId);
   if (!task) throw new Error("Not found");
   const upload = getTaskUpload(taskId);
   if (!upload || !uploadDataUrl(upload)) throw new Error("The source visual is unavailable. Re-upload it before approval.");
@@ -239,13 +250,14 @@ export async function approveVisual(taskId: string, editedDescription?: string, 
     previousStatus,
     newStatus: task.status,
   });
+  await persistVisualTask(task);
   revalidatePath(`/assessment/${taskId}`);
 }
 
 export async function rejectVisual(taskId: string, reason: string) {
   const user = await requireUser();
   if (!can(user.role, "task.reject")) throw new Error("Not permitted");
-  const task = getVisualTask(taskId);
+  const task = (await hydrateVisualTask(taskId)) ?? getVisualTask(taskId);
   if (!task) throw new Error("Not found");
 
   const previousStatus = task.status;
@@ -264,5 +276,6 @@ export async function rejectVisual(taskId: string, reason: string) {
     newStatus: task.status,
     reason: task.rejectionReason,
   });
+  await persistVisualTask(task);
   revalidatePath(`/assessment/${taskId}`);
 }

@@ -27,6 +27,23 @@ const behaviours = [
     includes: ["shouldUseRealOpenAi", 'c.mode === "real"', 'c.provider === "openai"'],
   },
   {
+    name: "real vision mode normalises a stale mock provider to OpenAI",
+    file: "src/lib/ai/config.ts",
+    includes: [
+      'const provider = mode === "real" ? "openai"',
+      'const DEFAULT_VISION_MODEL = "gpt-5.4-mini"',
+    ],
+  },
+  {
+    name: "GPT-5 vision requests omit legacy sampling parameters",
+    file: "src/lib/ai/providers/openai-vision-provider.ts",
+    includes: [
+      "generationControls",
+      'model.startsWith("gpt-5")',
+      'reasoning_effort: "none"',
+    ],
+  },
+  {
     name: "real mode with a missing OpenAI key returns provider_unavailable (no crash)",
     file: "src/lib/ai/providers/openai-vision-provider.ts",
     includes: ["if (!getOpenAiKey())", "providerUnavailableFlag"],
@@ -160,6 +177,11 @@ const behaviours = [
     name: "audit records prompt version + concise flag summary (no raw payloads)",
     file: "src/lib/ai/uncertainty.ts",
     includes: ["export function summariseFlags", "export function toStoredFlags"],
+  },
+  {
+    name: "a repeatable live GPT-5.4 mini image check is available",
+    file: "scripts/validate-openai-vision-live.mjs",
+    includes: ["gpt-5.4-mini", "chat.completions.parse", "imageEvidence"],
   },
 ];
 
