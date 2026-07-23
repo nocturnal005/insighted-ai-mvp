@@ -7,7 +7,7 @@ import { can } from "@/lib/rbac";
 import { db, id, recordAudit, createUpload, uploadDataUrl } from "@/lib/store";
 import { getVisualTask, getTaskUpload } from "@/lib/data";
 import { describeVisual, mapFlagsToAnswerSensitiveFlags, summariseFlags, toStoredFlags } from "@/lib/ai";
-import { assertValidUpload } from "@/lib/upload-guard";
+import { assertVisionImageUpload } from "@/lib/upload-guard";
 import { hasCompleteAssessmentContext, isAssessmentLikeContext, parseAssessmentContext } from "@/lib/assessment-context";
 import type { HintTier, VisualDescriptionTask } from "@/lib/types";
 
@@ -25,7 +25,7 @@ export async function createVisualTask(formData: FormData) {
   const file = formData.get("image") as File | null;
   if (!title) throw new Error("Title is required");
   if (!file || file.size === 0) throw new Error("A source visual is required");
-  assertValidUpload(file);
+  assertVisionImageUpload(file);
   if (!hasCompleteAssessmentContext(context, questionPrompt, assessedSkill)) {
     throw new Error("Question prompt and assessed skill are required for assessment use");
   }
@@ -88,6 +88,12 @@ async function generateVisualDescription(
     hasLinkedPupil: Boolean(task.pupilId),
   });
 
+  // Preserve the reviewer's working text before a re-run/regenerate overwrites it, but only
+  // when it diverged from the last AI draft (i.e. a human changed it), so nothing is kept on
+  // first generation and no reviewed version is ever lost silently.
+  if (task.editedDescription.trim() && task.editedDescription !== task.draftDescription) {
+    task.previousDescription = task.editedDescription;
+  }
   task.draftDescription = result.neutralDescription;
   task.editedDescription = result.neutralDescription;
   task.answerSensitiveFlags = mapFlagsToAnswerSensitiveFlags(result.answerSensitiveFlags);

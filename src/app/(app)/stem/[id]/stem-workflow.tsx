@@ -129,6 +129,16 @@ export function StemWorkflow({ task, upload, structure, permissions }: { task: S
           )}
           <textarea value={effectiveText} onChange={(e) => setText(e.target.value)} readOnly={approved || !permissions.canEdit} rows={9} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
 
+          {!approved && permissions.canEdit && task.previousDescription && (
+            <details className="rounded-lg border border-zinc-200 bg-zinc-50/60 px-3.5 py-2.5 text-sm">
+              <summary className="cursor-pointer font-medium text-zinc-600">Previous version — before the last re-run</summary>
+              <p className="mt-2 whitespace-pre-wrap text-zinc-600">{task.previousDescription}</p>
+              <button type="button" onClick={() => setText(task.previousDescription ?? "")} className="mt-2 inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50">
+                <RefreshCw className="h-3.5 w-3.5" /> Restore this version
+              </button>
+            </details>
+          )}
+
           {approved ? (
             <>
               <div className="flex items-center gap-2 rounded-xl bg-positive-50 px-3.5 py-3 text-sm text-positive-700"><Lock className="h-4 w-4" /> Approved and saved to the pupil record.</div>

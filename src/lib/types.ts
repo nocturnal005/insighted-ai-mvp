@@ -204,6 +204,9 @@ export interface VisualDescriptionTask {
   uploadId: string | null;
   draftDescription: string;
   editedDescription: string;
+  /** The reviewer's edited text, captured just before the most recent re-run/regenerate so it
+   *  is never silently overwritten. Optional for seed/back-compat. */
+  previousDescription?: string | null;
   answerSensitiveFlags: AnswerSensitiveFlag[];
   status: TaskStatus;
   approvedBy: string | null;
@@ -235,6 +238,9 @@ export interface StemTask {
   uploadId: string | null;
   draftDescription: string;
   editedDescription: string;
+  /** The reviewer's edited text, captured just before the most recent re-run/regenerate so it
+   *  is never silently overwritten. Optional for seed/back-compat. */
+  previousDescription?: string | null;
   answerSensitiveFlags: AnswerSensitiveFlag[];
   status: TaskStatus;
   approvedBy: string | null;
