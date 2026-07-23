@@ -13,8 +13,7 @@ import {
 } from "lucide-react";
 import { DEMO_MODE, demoUsers } from "@/lib/session";
 import type { User, UserRole } from "@/lib/types";
-import { signInAs } from "./actions";
-import { WorkspaceSubmitButton } from "./workspace-submit-button";
+import { WorkspaceCard } from "./workspace-card";
 
 /**
  * Public front page. Presents the product and lets a visitor enter a role-specific
@@ -162,24 +161,23 @@ function WorkspaceGrid({ users }: { users: User[] }) {
       {cards.map((card) => {
         const Icon = card.icon;
         return (
-          <form key={card.title} action={signInAs} className="h-full">
-            <input type="hidden" name="userId" value={card.user.id} />
-            {card.redirectTo && <input type="hidden" name="next" value={card.redirectTo} />}
-            <WorkspaceSubmitButton
-              ariaLabel={`Enter the ${card.title} workspace`}
-              highlight={Boolean(card.highlight)}
-            >
-              <div className="mb-4">
-                <Icon className="mb-4 h-8 w-8 text-[#002147]" aria-hidden="true" strokeWidth={1.75} />
-                <h3 className="font-display mb-2 text-xl font-bold text-[#000a1e]">{card.title}</h3>
-                <p className="text-sm italic leading-relaxed text-[#44474e]">{card.blurb}</p>
-              </div>
-              <div className="mt-auto flex items-center justify-between border-t border-[#c4c6cf] pt-4 text-sm font-semibold text-[#002147]">
-                <span>Enter Workspace</span>
-                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
-              </div>
-            </WorkspaceSubmitButton>
-          </form>
+          <WorkspaceCard
+            key={card.title}
+            userId={card.user.id}
+            next={card.redirectTo}
+            ariaLabel={`Enter the ${card.title} workspace`}
+            highlight={Boolean(card.highlight)}
+          >
+            <div className="mb-4">
+              <Icon className="mb-4 h-8 w-8 text-[#002147]" aria-hidden="true" strokeWidth={1.75} />
+              <h3 className="font-display mb-2 text-xl font-bold text-[#000a1e]">{card.title}</h3>
+              <p className="text-sm italic leading-relaxed text-[#44474e]">{card.blurb}</p>
+            </div>
+            <div className="mt-auto flex items-center justify-between border-t border-[#c4c6cf] pt-4 text-sm font-semibold text-[#002147]">
+              <span>Enter Workspace</span>
+              <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+            </div>
+          </WorkspaceCard>
         );
       })}
     </div>
