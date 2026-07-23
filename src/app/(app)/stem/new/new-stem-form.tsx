@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Upload, Loader2, Sparkles } from "lucide-react";
 import { Card, CardBody } from "@/components/ui/card";
-import { UploadPdfNote } from "@/components/upload-note";
 import { createStemTask } from "../actions";
 
 const VISUAL_TYPES = [
@@ -96,7 +95,6 @@ export function NewStemForm({ pupils }: { pupils: { id: string; label: string }[
               <span className="mt-0.5 text-xs text-zinc-400">PNG or JPEG · optional for this demo</span>
               <input id="image" name="image" type="file" accept="image/png,image/jpeg" className="sr-only" onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)} />
             </label>
-            <UploadPdfNote />
           </div>
 
           <div className="flex justify-end pt-1"><SubmitButton /></div>

@@ -13,6 +13,22 @@ export function assertValidUpload(file: File): void {
   if (!check.ok) throw new Error(check.reason ?? "Upload failed validation");
 }
 
+/**
+ * Stricter guard for the vision-based sections (Assessment-Safe, STEM). These send the upload
+ * straight to an image model, which cannot read a PDF, so a PDF here would silently produce an
+ * empty or garbage description. Reject it with a clear, actionable message instead. The Braille
+ * module keeps PDF because its OCR pipeline treats documents differently.
+ */
+export function assertVisionImageUpload(file: File): void {
+  assertValidUpload(file);
+  const isPdf = file.type.toLowerCase() === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  if (isPdf) {
+    throw new Error(
+      "PDF isn't supported for this section yet. Upload a PNG or JPEG image of the visual — a screenshot or clear photo of the page works.",
+    );
+  }
+}
+
 /** Comma-separated accept attribute for file inputs, derived from configured types. */
 export function uploadAcceptAttr(): string {
   return getUploadLimits().allowedTypes.join(",");

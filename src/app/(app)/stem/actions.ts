@@ -7,7 +7,7 @@ import { can } from "@/lib/rbac";
 import { db, id, recordAudit, createUpload, uploadDataUrl } from "@/lib/store";
 import { getStemTask, getTaskUpload } from "@/lib/data";
 import { describeStemVisual, mapFlagsToAnswerSensitiveFlags, summariseFlags, toStoredFlags } from "@/lib/ai";
-import { assertValidUpload } from "@/lib/upload-guard";
+import { assertVisionImageUpload } from "@/lib/upload-guard";
 import type { DescriptionStyle, StemTask, VisualType } from "@/lib/types";
 
 export async function createStemTask(formData: FormData) {
@@ -24,7 +24,7 @@ export async function createStemTask(formData: FormData) {
   if (!title) throw new Error("Title is required");
   let uploadBuffer: Buffer | null = null;
   if (file && file.size > 0) {
-    assertValidUpload(file);
+    assertVisionImageUpload(file);
     uploadBuffer = Buffer.from(await file.arrayBuffer());
   }
 
@@ -84,6 +84,11 @@ async function generateStemDescription(
   });
 
   task.style = style;
+  // Preserve the reviewer's working text before a re-run/restyle overwrites it, but only when
+  // it diverged from the last AI draft, so no reviewed version is lost silently.
+  if (task.editedDescription.trim() && task.editedDescription !== task.draftDescription) {
+    task.previousDescription = task.editedDescription;
+  }
   task.draftDescription = result.structuredDescription;
   task.editedDescription = result.structuredDescription;
   task.answerSensitiveFlags = mapFlagsToAnswerSensitiveFlags(result.answerSensitiveFlags);

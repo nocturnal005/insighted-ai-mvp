@@ -46,6 +46,12 @@ import { assessmentContextFlags, safeErrorLabel, sanitizeProviderText, truncateT
 const PROVIDER = "openai";
 /** Never store/display more than this many provider flags, however many are returned. */
 const MAX_FLAGS = 20;
+/**
+ * Best-effort determinism. OpenAI treats `seed` as a hint, but combined with temperature 0 it
+ * makes repeated runs of the same image + prompt far more likely to return identical text,
+ * directly reducing the run-to-run drift reviewers were seeing.
+ */
+const VISION_SEED = 20260723;
 
 const KNOWN_CATEGORIES: UncertaintyCategory[] = [
   "low_image_quality", "low_ocr_confidence", "unclear_braille_cell", "possible_contraction_issue",
@@ -77,24 +83,19 @@ const rawFlagSchema = z.object({
   severity: z.string().optional(),
 });
 
-const visualSchema = z.object({
-  visualType: z.string().optional(),
-  neutralDescription: z.string(),
-  visibleElements: z.array(z.string()).optional(),
-  labelsDetected: z.array(z.string()).optional(),
-  spatialLayout: z.string().optional(),
-  confidence: z.number().optional(),
-  answerSensitiveFlags: z.array(rawFlagSchema).optional(),
-});
-
-const stemSchema = z.object({
-  sections: z
-    .array(z.object({ heading: z.string(), content: z.string(), confidence: z.number().optional() }))
-    .optional(),
-  structuredDescription: z.string().optional(),
-  confidence: z.number().optional(),
-  answerSensitiveFlags: z.array(rawFlagSchema).optional(),
-});
+// Assessment-Safe and STEM descriptions use OpenAI Structured Outputs (schemas defined by
+// VISUAL_TYPES below). Unlike json_object mode, the model is forced to return EXACTLY the
+// declared shape, so a missing/renamed field can no longer collapse a run into the blank
+// "no description" fallback. OpenAI strict mode forbids `.optional()`, so an absent value is
+// modelled as required-but-nullable (`.nullable()`), matching the Braille reviewer below.
+const structuredFlagSchema = z
+  .object({
+    text: z.string(),
+    reason: z.string(),
+    category: z.string().nullable(),
+    severity: z.string().nullable(),
+  })
+  .strict();
 
 const brailleSchema = z.object({
   draftText: z.string(),
@@ -128,12 +129,45 @@ const brailleReviewSchema = z
   })
   .strict();
 
-const VISUAL_TYPES: DetectedVisualType[] = [
+const VISUAL_TYPES = [
   "line_graph", "bar_chart", "table", "labelled_diagram", "science_diagram",
   "experiment_setup", "map", "photo", "other",
-];
+] as const satisfies readonly DetectedVisualType[];
 
-function mapRawFlags(raw: z.infer<typeof rawFlagSchema>[] | undefined, fallbackCat: UncertaintyCategory): UncertaintyFlag[] {
+const visualStructuredSchema = z
+  .object({
+    visualType: z.enum(VISUAL_TYPES),
+    neutralDescription: z.string(),
+    visibleElements: z.array(z.string()),
+    labelsDetected: z.array(z.string()),
+    spatialLayout: z.string(),
+    // Kept unconstrained; effectiveConfidence()/clampConfidence() clamp to [0,1] server-side.
+    confidence: z.number(),
+    answerSensitiveFlags: z.array(structuredFlagSchema),
+  })
+  .strict();
+
+const stemStructuredSchema = z
+  .object({
+    sections: z.array(
+      z
+        .object({
+          heading: z.string(),
+          content: z.string(),
+          confidence: z.number(),
+        })
+        .strict(),
+    ),
+    structuredDescription: z.string(),
+    confidence: z.number(),
+    answerSensitiveFlags: z.array(structuredFlagSchema),
+  })
+  .strict();
+
+/** Accepts json_object flags (optional fields) and structured-output flags (nullable fields). */
+type RawModelFlag = { text: string; reason: string; category?: string | null; severity?: string | null };
+
+function mapRawFlags(raw: RawModelFlag[] | undefined, fallbackCat: UncertaintyCategory): UncertaintyFlag[] {
   return (raw ?? []).slice(0, MAX_FLAGS).map((f) =>
     makeFlag({
       // Sanitise: overlong model text/reason can never flood the UI or audit.
@@ -170,18 +204,27 @@ function getClient(): OpenAI | null {
   return cachedClient;
 }
 
-function imageContent(input: { dataUrl?: string; imageUrl?: string }): { type: "image_url"; image_url: { url: string } } | null {
+/**
+ * Full-resolution image part for a vision call. `detail: "high"` tiles the image at native
+ * resolution so fine axis labels, units, and table cells survive — matching the Braille
+ * reviewer above. The default ("auto") downsamples large educational visuals, which is a
+ * major driver of run-to-run description drift for charts, tables, and labelled diagrams.
+ */
+type VisionImagePart = { type: "image_url"; image_url: { url: string; detail: "high" } };
+
+function imageContent(input: { dataUrl?: string; imageUrl?: string }): VisionImagePart | null {
   const url = input.dataUrl || input.imageUrl;
   if (!url) return null;
-  return { type: "image_url", image_url: { url } };
+  return { type: "image_url", image_url: { url, detail: "high" } };
 }
 
-async function callVisionJson(system: string, image: { type: "image_url"; image_url: { url: string } }, model: string): Promise<unknown> {
+async function callVisionJson(system: string, image: VisionImagePart, model: string): Promise<unknown> {
   const client = getClient();
   if (!client) throw new Error("no_client");
   const completion = await client.chat.completions.create({
     model,
     temperature: 0,
+    seed: VISION_SEED,
     max_completion_tokens: 6000,
     response_format: { type: "json_object" },
     messages: [
@@ -191,6 +234,36 @@ async function callVisionJson(system: string, image: { type: "image_url"; image_
   });
   const text = completion.choices[0]?.message?.content ?? "";
   return JSON.parse(text);
+}
+
+/**
+ * Structured-output vision call. `zodResponseFormat` constrains the model to `schema` and the
+ * SDK validates the result, so callers get either a schema-conformant object or `null` (a
+ * refusal). A truncated or content-filtered completion throws and is handled by the caller's
+ * catch. This is the same mechanism the Braille reviewer uses and is far more reliable than
+ * json_object mode, where a schema miss surfaced only after the fact as a parse failure.
+ */
+async function parseVisionJson<S extends z.ZodType>(
+  system: string,
+  image: VisionImagePart,
+  model: string,
+  schema: S,
+  schemaName: string,
+): Promise<z.infer<S> | null> {
+  const client = getClient();
+  if (!client) throw new Error("no_client");
+  const completion = await client.chat.completions.parse({
+    model,
+    temperature: 0,
+    seed: VISION_SEED,
+    max_completion_tokens: 6000,
+    response_format: zodResponseFormat(schema, schemaName),
+    messages: [
+      { role: "system", content: "You output strict JSON only. No prose, no markdown fences." },
+      { role: "user", content: [{ type: "text", text: system }, image] },
+    ],
+  });
+  return completion.choices[0]?.message?.parsed ?? null;
 }
 
 // ── Public provider functions ───────────────────────────────────────────────
@@ -314,24 +387,24 @@ export async function describeVisualWithOpenAI(input: VisualDescriptionInput): P
   if (!image) return visualFallback(input, timer, model, [noImageFlag(), ...contextFlags]);
 
   try {
-    const json = await callVisionJson(buildVisualPrompt(input), image, model);
-    const parsed = visualSchema.parse(json);
-    // An empty description is a failed run, not a valid neutral description.
+    const parsed = await parseVisionJson(buildVisualPrompt(input), image, model, visualStructuredSchema, "assessment_safe_visual_description");
+    // A refusal yields no parsed object; an empty description is a failed run, not a valid one.
+    if (!parsed) {
+      return visualFallback(input, timer, model, [processingFailedFlag("model refusal"), ...contextFlags]);
+    }
     if (!parsed.neutralDescription.trim()) {
       return visualFallback(input, timer, model, [processingFailedFlag("empty description"), ...contextFlags]);
     }
     const flags = [...mapRawFlags(parsed.answerSensitiveFlags, "answer_leak_risk"), ...contextFlags];
-    const visualType = (VISUAL_TYPES as string[]).includes(parsed.visualType ?? "")
-      ? (parsed.visualType as DetectedVisualType)
-      : "other";
     return {
-      visualType,
+      // Structured Outputs constrain visualType to the enum, so no coercion is needed.
+      visualType: parsed.visualType,
       neutralDescription: parsed.neutralDescription,
-      visibleElements: parsed.visibleElements ?? [],
-      labelsDetected: parsed.labelsDetected ?? [],
-      spatialLayout: parsed.spatialLayout ?? "",
+      visibleElements: parsed.visibleElements,
+      labelsDetected: parsed.labelsDetected,
+      spatialLayout: parsed.spatialLayout,
       answerSensitiveFlags: flags,
-      confidence: effectiveConfidence(parsed.confidence ?? 0.6, flags),
+      confidence: effectiveConfidence(parsed.confidence, flags),
       meta: finishMeta(timer, { provider: PROVIDER, model, engineVersion: "openai-vision", promptVersion: PROMPT_VERSIONS.visual, mode: "real" }),
       requiresHumanApproval: true,
     };
@@ -349,16 +422,18 @@ export async function describeStemWithOpenAI(input: StemDescriptionInput): Promi
   if (!image) return stemFallback(timer, model, [noImageFlag()]);
 
   try {
-    const json = await callVisionJson(buildStemPrompt(input), image, model);
-    const parsed = stemSchema.parse(json);
-    const sections = (parsed.sections ?? []).map((s) => ({
+    const parsed = await parseVisionJson(buildStemPrompt(input), image, model, stemStructuredSchema, "stem_structured_description");
+    if (!parsed) {
+      return stemFallback(timer, model, [processingFailedFlag("model refusal")]);
+    }
+    const sections = parsed.sections.map((s) => ({
       heading: s.heading,
       content: s.content,
-      confidence: clampConfidence(s.confidence ?? 0.6),
+      confidence: clampConfidence(s.confidence),
     }));
     const flags = mapRawFlags(parsed.answerSensitiveFlags, "answer_leak_risk");
     const structuredDescription =
-      parsed.structuredDescription ?? sections.map((s) => `${s.heading}: ${s.content}`).join("\n");
+      parsed.structuredDescription.trim() || sections.map((s) => `${s.heading}: ${s.content}`).join("\n");
     // No usable structured output → treat as a failed run rather than an empty description.
     if (!structuredDescription.trim() && sections.length === 0) {
       return stemFallback(timer, model, [processingFailedFlag("empty description")]);
@@ -367,7 +442,7 @@ export async function describeStemWithOpenAI(input: StemDescriptionInput): Promi
       structuredDescription,
       sections,
       answerSensitiveFlags: flags,
-      confidence: effectiveConfidence(parsed.confidence ?? 0.6, flags),
+      confidence: effectiveConfidence(parsed.confidence, flags),
       meta: finishMeta(timer, { provider: PROVIDER, model, engineVersion: "openai-vision", promptVersion: PROMPT_VERSIONS.stem, mode: "real" }),
       requiresHumanApproval: true,
     };
