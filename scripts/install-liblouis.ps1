@@ -44,7 +44,7 @@ if (Test-Path -LiteralPath $InstallRoot) {
   }
 }
 
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("insighted-liblouis-" + [Guid]::NewGuid().ToString("N"))
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("braivanta-liblouis-" + [Guid]::NewGuid().ToString("N"))
 $archivePath = Join-Path $tempRoot $assetName
 $extractRoot = Join-Path $tempRoot "extracted"
 
@@ -70,7 +70,7 @@ try {
   $resolvedTemp = [System.IO.Path]::GetFullPath($tempRoot)
   $systemTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
   if ($resolvedTemp.StartsWith($systemTemp, [System.StringComparison]::OrdinalIgnoreCase) -and
-      (Split-Path -Leaf $resolvedTemp).StartsWith("insighted-liblouis-")) {
+      (Split-Path -Leaf $resolvedTemp).StartsWith("braivanta-liblouis-")) {
     Remove-Item -LiteralPath $resolvedTemp -Recurse -Force -ErrorAction SilentlyContinue
   }
 }

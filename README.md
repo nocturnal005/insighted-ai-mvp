@@ -233,8 +233,8 @@ npm run build
 
 Persistence:
 
-* Demo records are stored in `.insighted-data/db.json`.
-* Uploaded files are stored in `.insighted-data/uploads`.
+* Demo records are stored in `.braivanta-data/db.json`.
+* Uploaded files are stored in `.braivanta-data/uploads`.
 * When a Neon/Postgres URL is configured, Braille, Assessment-Safe, and STEM records plus portable source-image data are also persisted to Neon and hydrated on later requests/instances.
 * The local folders are ignored by git and remain a controlled-demo fallback.
 

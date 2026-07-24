@@ -63,7 +63,7 @@ const completion = await client.chat.completions.parse({
   max_completion_tokens: 2500,
   response_format: zodResponseFormat(
     visualSchema,
-    "insighted_live_visual_check",
+    "braivanta_live_visual_check",
   ),
   messages: [
     {

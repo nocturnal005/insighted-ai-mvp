@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Isolated throwaway store so validation never touches the local demo data.
-const DATA_DIR = mkdtempSync(path.join(os.tmpdir(), "insighted-guardrail-"));
+const DATA_DIR = mkdtempSync(path.join(os.tmpdir(), "braivanta-guardrail-"));
 const NEXT_DIST_DIR = `.next-validate-external-${process.pid}`;
 const NEXT_TSCONFIG = `.tsconfig-validate-external-${process.pid}.json`;
 writeFileSync(
@@ -133,9 +133,9 @@ function startApp() {
       DATABASE_URL: "",
       POSTGRES_URL: "",
       NEON_DATABASE_URL: "",
-      INSIGHTED_DATA_DIR: DATA_DIR, // isolated throwaway store (never the demo data)
-      INSIGHTED_NEXT_DIST_DIR: NEXT_DIST_DIR,
-      INSIGHTED_TSCONFIG_PATH: NEXT_TSCONFIG,
+      BRAIVANTA_DATA_DIR: DATA_DIR, // isolated throwaway store (never the demo data)
+      BRAIVANTA_NEXT_DIST_DIR: NEXT_DIST_DIR,
+      BRAIVANTA_TSCONFIG_PATH: NEXT_TSCONFIG,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -205,7 +205,7 @@ class Session {
   async login(userId) {
     // Login cards now invoke a Client Component action, so no server-rendered form
     // action exists to scrape. Demo authentication intentionally stores the seeded id.
-    this.cookie = `insighted_session=${userId}`;
+    this.cookie = `braivanta_session=${userId}`;
     const r = await this.get("/dashboard");
     if (r.status !== 200) throw new Error(`login failed for ${userId} (${r.status})`);
     return this;

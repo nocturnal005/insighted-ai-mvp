@@ -14,7 +14,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const DATA_DIR = mkdtempSync(path.join(os.tmpdir(), "insighted-abc-"));
+const DATA_DIR = mkdtempSync(path.join(os.tmpdir(), "braivanta-abc-"));
 const NEXT_DIST_DIR = `.next-validate-abc-${process.pid}`;
 const NEXT_TSCONFIG = `.tsconfig-validate-abc-${process.pid}.json`;
 writeFileSync(
@@ -115,9 +115,9 @@ function startApp() {
       DATABASE_URL: "",
       POSTGRES_URL: "",
       NEON_DATABASE_URL: "",
-      INSIGHTED_DATA_DIR: DATA_DIR,
-      INSIGHTED_NEXT_DIST_DIR: NEXT_DIST_DIR,
-      INSIGHTED_TSCONFIG_PATH: NEXT_TSCONFIG,
+      BRAIVANTA_DATA_DIR: DATA_DIR,
+      BRAIVANTA_NEXT_DIST_DIR: NEXT_DIST_DIR,
+      BRAIVANTA_TSCONFIG_PATH: NEXT_TSCONFIG,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -170,7 +170,7 @@ class Session {
     // The latency-optimised login card invokes its action from a Client Component, so
     // there is no longer a server-rendered <form> action to scrape. The demo session
     // cookie intentionally contains only the selected seeded user id.
-    this.cookie = "insighted_session=u_amelia";
+    this.cookie = "braivanta_session=u_amelia";
     const response = await this.get("/dashboard");
     if (response.status !== 200) throw new Error(`demo session failed (${response.status})`);
     return this;

@@ -19,7 +19,7 @@ An honest, client-safe summary of what this build does **not** yet do, so a demo
 
 ## Data, auth & storage (production work, not started in this phase)
 
-- **Demo persistence, not production infrastructure.** Records live in a local demo store (`.insighted-data/`), which falls back to in-memory when the disk is read-only. This is for controlled demos, not durable production hosting.
+- **Demo persistence, not production infrastructure.** Records live in a local demo store (`.braivanta-data/`), which falls back to in-memory when the disk is read-only. This is for controlled demos, not durable production hosting.
 - **Demo authentication only.** `DEMO_MODE=true` uses a staff picker. Real authentication (identity provider / SSO) is not implemented yet; `DEMO_MODE=false` disables the picker but still needs a real provider wired in.
 - **No production database, object storage, or hosted auth yet.** Clerk/Neon/Supabase/Vercel Blob and similar are intentionally out of scope for this phase.
 

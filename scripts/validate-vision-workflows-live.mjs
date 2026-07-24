@@ -22,7 +22,7 @@ if (!process.env.OPENAI_API_KEY) {
   process.exit(1);
 }
 
-const dataDir = mkdtempSync(path.join(os.tmpdir(), "insighted-vision-live-"));
+const dataDir = mkdtempSync(path.join(os.tmpdir(), "braivanta-vision-live-"));
 const nextDistDir = `.next-validate-vision-${process.pid}`;
 const nextTsConfig = `.tsconfig-validate-vision-${process.pid}.json`;
 writeFileSync(
@@ -50,9 +50,9 @@ function startApp() {
       DATABASE_URL: "",
       POSTGRES_URL: "",
       NEON_DATABASE_URL: "",
-      INSIGHTED_DATA_DIR: dataDir,
-      INSIGHTED_NEXT_DIST_DIR: nextDistDir,
-      INSIGHTED_TSCONFIG_PATH: nextTsConfig,
+      BRAIVANTA_DATA_DIR: dataDir,
+      BRAIVANTA_NEXT_DIST_DIR: nextDistDir,
+      BRAIVANTA_TSCONFIG_PATH: nextTsConfig,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -106,7 +106,7 @@ function extractFormActionId(html, marker) {
 }
 
 class Session {
-  cookie = "insighted_session=u_amelia";
+  cookie = "braivanta_session=u_amelia";
 
   headers(extra = {}) {
     return { Origin: base, Cookie: this.cookie, ...extra };

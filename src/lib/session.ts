@@ -8,7 +8,7 @@ import type { User } from "@/lib/types";
  * (A real deployment swaps this for Supabase Auth / OIDC — the rest of the app only
  * depends on `getCurrentUser()` returning a User, so nothing else changes.)
  */
-const COOKIE = "insighted_session";
+const COOKIE = "braivanta_session";
 export const DEMO_MODE = process.env.DEMO_MODE !== "false";
 
 export async function setSession(userId: string): Promise<void> {

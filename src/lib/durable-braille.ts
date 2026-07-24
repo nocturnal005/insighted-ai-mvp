@@ -18,8 +18,8 @@ interface StoredBrailleDetailRow extends StoredBrailleTaskRow {
   corrections: CorrectionPair[] | string;
 }
 
-const schemaPromiseKey = "__insighted_braille_schema";
-const readAvailabilityKey = "__insighted_braille_read_availability";
+const schemaPromiseKey = "__braivanta_braille_schema";
+const readAvailabilityKey = "__braivanta_braille_read_availability";
 
 function databaseUrl(): string | null {
   return (
