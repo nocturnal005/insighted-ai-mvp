@@ -1,6 +1,11 @@
 import { neon } from "@neondatabase/serverless";
 import { db, uploadDataUrl } from "@/lib/store";
 import type { AuditEntry, BrailleTask, CorrectionPair, Upload } from "@/lib/types";
+import {
+  canReadDurableData,
+  durableFetchOptions,
+  markDurableReadUnavailable,
+} from "@/lib/durable-availability";
 
 interface StoredBrailleTaskRow {
   task: BrailleTask | string;
@@ -14,6 +19,7 @@ interface StoredBrailleDetailRow extends StoredBrailleTaskRow {
 }
 
 const schemaPromiseKey = "__insighted_braille_schema";
+const readAvailabilityKey = "__insighted_braille_read_availability";
 
 function databaseUrl(): string | null {
   return (
@@ -26,7 +32,11 @@ function databaseUrl(): string | null {
 
 function client() {
   const url = databaseUrl();
-  return url ? neon(url) : null;
+  return url ? neon(url, { fetchOptions: durableFetchOptions() }) : null;
+}
+
+function readClient() {
+  return canReadDurableData(readAvailabilityKey) ? client() : null;
 }
 
 async function ensureSchema(): Promise<void> {
@@ -148,52 +158,59 @@ export async function hydrateBrailleTask(
   taskId: string,
   options: { includeUploadData?: boolean } = {},
 ): Promise<BrailleTask | undefined> {
-  const sql = client();
-  if (!sql) return db.brailleTasks.find((item) => item.id === taskId);
-  await ensureSchema();
+  const local = db.brailleTasks.find((item) => item.id === taskId);
+  const sql = readClient();
+  if (!sql) return local;
 
-  const rows = (options.includeUploadData
-    ? await sql`
-        SELECT task, upload, audit, corrections
-        FROM insighted_braille_records
-        WHERE task_id = ${taskId}
-        LIMIT 1
-      `
-    : await sql`
-        SELECT task,
-               CASE WHEN upload IS NULL THEN NULL ELSE upload - 'dataUrl' END AS upload,
-               audit,
-               corrections
-        FROM insighted_braille_records
-        WHERE task_id = ${taskId}
-        LIMIT 1
-      `) as unknown as StoredBrailleDetailRow[];
+  try {
+    const rows = (options.includeUploadData
+      ? await sql`
+          SELECT task, upload, audit, corrections
+          FROM insighted_braille_records
+          WHERE task_id = ${taskId}
+          LIMIT 1
+        `
+      : await sql`
+          SELECT task,
+                 CASE WHEN upload IS NULL THEN NULL ELSE upload - 'dataUrl' END AS upload,
+                 audit,
+                 corrections
+          FROM insighted_braille_records
+          WHERE task_id = ${taskId}
+          LIMIT 1
+        `) as unknown as StoredBrailleDetailRow[];
 
-  if (!rows.length) return db.brailleTasks.find((item) => item.id === taskId);
-  return mergeRecord(rows[0]);
+    return rows.length ? mergeRecord(rows[0]) : local;
+  } catch {
+    markDurableReadUnavailable(readAvailabilityKey);
+    return local;
+  }
 }
 
 /** Hydrate all durable Braille records for lists, dashboard counts, and queues. */
 export async function hydrateBrailleTasks(): Promise<void> {
-  const sql = client();
+  const sql = readClient();
   if (!sql) return;
-  await ensureSchema();
 
-  const rows = (await sql`
-    SELECT task
-    FROM insighted_braille_records
-    ORDER BY updated_at DESC
-    LIMIT 500
-  `) as unknown as StoredBrailleTaskRow[];
+  try {
+    const rows = (await sql`
+      SELECT task
+      FROM insighted_braille_records
+      ORDER BY updated_at DESC
+      LIMIT 500
+    `) as unknown as StoredBrailleTaskRow[];
 
-  // Summary routes need task fields only. Merging in one pass avoids repeatedly
-  // filtering/sorting audit, correction, and upload arrays for every list row.
-  const tasksById = new Map(db.brailleTasks.map((task) => [task.id, task]));
-  for (const row of rows) {
-    const task = jsonValue<BrailleTask>(row.task);
-    tasksById.set(task.id, task);
+    // Summary routes need task fields only. Merging in one pass avoids repeatedly
+    // filtering/sorting audit, correction, and upload arrays for every list row.
+    const tasksById = new Map(db.brailleTasks.map((task) => [task.id, task]));
+    for (const row of rows) {
+      const task = jsonValue<BrailleTask>(row.task);
+      tasksById.set(task.id, task);
+    }
+    db.brailleTasks = [...tasksById.values()];
+  } catch {
+    markDurableReadUnavailable(readAvailabilityKey);
   }
-  db.brailleTasks = [...tasksById.values()];
 }
 
 /** Load the original bytes only for the protected source-image response or OCR. */
@@ -203,20 +220,23 @@ export async function hydrateBrailleUpload(taskId: string): Promise<Upload | und
   );
   if (local) return local;
 
-  const sql = client();
+  const sql = readClient();
   if (!sql) return [...db.uploads].reverse().find((item) => item.taskId === taskId);
-  await ensureSchema();
+  try {
+    const rows = (await sql`
+      SELECT upload
+      FROM insighted_braille_records
+      WHERE task_id = ${taskId}
+      LIMIT 1
+    `) as unknown as Array<{ upload: Upload | string | null }>;
+    const upload = rows[0]?.upload ? jsonValue<Upload>(rows[0].upload) : undefined;
+    if (!upload) return undefined;
 
-  const rows = (await sql`
-    SELECT upload
-    FROM insighted_braille_records
-    WHERE task_id = ${taskId}
-    LIMIT 1
-  `) as unknown as Array<{ upload: Upload | string | null }>;
-  const upload = rows[0]?.upload ? jsonValue<Upload>(rows[0].upload) : undefined;
-  if (!upload) return undefined;
-
-  db.uploads = db.uploads.filter((item) => item.taskId !== taskId);
-  db.uploads.push(upload);
-  return upload;
+    db.uploads = db.uploads.filter((item) => item.taskId !== taskId);
+    db.uploads.push(upload);
+    return upload;
+  } catch {
+    markDurableReadUnavailable(readAvailabilityKey);
+    return undefined;
+  }
 }

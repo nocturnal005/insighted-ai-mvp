@@ -1,5 +1,10 @@
 import { neon } from "@neondatabase/serverless";
 import { db, uploadDataUrl } from "@/lib/store";
+import {
+  canReadDurableData,
+  durableFetchOptions,
+  markDurableReadUnavailable,
+} from "@/lib/durable-availability";
 import type {
   AuditEntry,
   StemTask,
@@ -21,6 +26,7 @@ interface StoredDetailRow extends StoredTaskRow {
 }
 
 const schemaPromiseKey = "__insighted_demo_schema";
+const readAvailabilityKey = "__insighted_demo_read_availability";
 
 function databaseUrl(): string | null {
   return (
@@ -33,7 +39,11 @@ function databaseUrl(): string | null {
 
 function client() {
   const url = databaseUrl();
-  return url ? neon(url) : null;
+  return url ? neon(url, { fetchOptions: durableFetchOptions() }) : null;
+}
+
+function readClient() {
+  return canReadDurableData(readAvailabilityKey) ? client() : null;
 }
 
 async function ensureSchema(): Promise<void> {
@@ -166,61 +176,67 @@ async function hydrateTask(
     module === "visual"
       ? db.visualTasks.find((item) => item.id === taskId)
       : db.stemTasks.find((item) => item.id === taskId);
-  const sql = client();
+  const sql = readClient();
   if (!sql) return local;
-  await ensureSchema();
+  try {
+    const rows = (options.includeUploadData
+      ? await sql`
+          SELECT module, task, upload, audit
+          FROM insighted_demo_records
+          WHERE task_id = ${taskId} AND module = ${module}
+          LIMIT 1
+        `
+      : await sql`
+          SELECT module,
+                 task,
+                 CASE WHEN upload IS NULL THEN NULL ELSE upload - 'dataUrl' END AS upload,
+                 audit
+          FROM insighted_demo_records
+          WHERE task_id = ${taskId} AND module = ${module}
+          LIMIT 1
+        `) as unknown as StoredDetailRow[];
 
-  const rows = (options.includeUploadData
-    ? await sql`
-        SELECT module, task, upload, audit
-        FROM insighted_demo_records
-        WHERE task_id = ${taskId} AND module = ${module}
-        LIMIT 1
-      `
-    : await sql`
-        SELECT module,
-               task,
-               CASE WHEN upload IS NULL THEN NULL ELSE upload - 'dataUrl' END AS upload,
-               audit
-        FROM insighted_demo_records
-        WHERE task_id = ${taskId} AND module = ${module}
-        LIMIT 1
-      `) as unknown as StoredDetailRow[];
-
-  return rows.length ? mergeRecord(rows[0]) : local;
+    return rows.length ? mergeRecord(rows[0]) : local;
+  } catch {
+    markDurableReadUnavailable(readAvailabilityKey);
+    return local;
+  }
 }
 
 async function hydrateTasks(module: DurableModule): Promise<void> {
-  const sql = client();
+  const sql = readClient();
   if (!sql) return;
-  await ensureSchema();
 
-  const rows = (await sql`
-    SELECT task
-    FROM insighted_demo_records
-    WHERE module = ${module}
-    ORDER BY updated_at DESC
-    LIMIT 500
-  `) as unknown as StoredTaskRow[];
+  try {
+    const rows = (await sql`
+      SELECT task
+      FROM insighted_demo_records
+      WHERE module = ${module}
+      ORDER BY updated_at DESC
+      LIMIT 500
+    `) as unknown as StoredTaskRow[];
 
-  if (module === "visual") {
-    const byId = new Map(db.visualTasks.map((task) => [task.id, task]));
+    if (module === "visual") {
+      const byId = new Map(db.visualTasks.map((task) => [task.id, task]));
+      for (const row of rows) {
+        const task = jsonValue<VisualDescriptionTask>(
+          row.task as VisualDescriptionTask | string,
+        );
+        byId.set(task.id, task);
+      }
+      db.visualTasks = [...byId.values()];
+      return;
+    }
+
+    const byId = new Map(db.stemTasks.map((task) => [task.id, task]));
     for (const row of rows) {
-      const task = jsonValue<VisualDescriptionTask>(
-        row.task as VisualDescriptionTask | string,
-      );
+      const task = jsonValue<StemTask>(row.task as StemTask | string);
       byId.set(task.id, task);
     }
-    db.visualTasks = [...byId.values()];
-    return;
+    db.stemTasks = [...byId.values()];
+  } catch {
+    markDurableReadUnavailable(readAvailabilityKey);
   }
-
-  const byId = new Map(db.stemTasks.map((task) => [task.id, task]));
-  for (const row of rows) {
-    const task = jsonValue<StemTask>(row.task as StemTask | string);
-    byId.set(task.id, task);
-  }
-  db.stemTasks = [...byId.values()];
 }
 
 export function persistVisualTask(
@@ -268,22 +284,25 @@ export async function hydrateDemoUpload(taskId: string): Promise<Upload | undefi
   );
   if (local) return local;
 
-  const sql = client();
+  const sql = readClient();
   if (!sql) return [...db.uploads].reverse().find((item) => item.taskId === taskId);
-  await ensureSchema();
+  try {
+    const rows = (await sql`
+      SELECT upload
+      FROM insighted_demo_records
+      WHERE task_id = ${taskId}
+      LIMIT 1
+    `) as unknown as Array<{ upload: Upload | string | null }>;
+    const upload = rows[0]?.upload
+      ? jsonValue<Upload>(rows[0].upload)
+      : undefined;
+    if (!upload) return undefined;
 
-  const rows = (await sql`
-    SELECT upload
-    FROM insighted_demo_records
-    WHERE task_id = ${taskId}
-    LIMIT 1
-  `) as unknown as Array<{ upload: Upload | string | null }>;
-  const upload = rows[0]?.upload
-    ? jsonValue<Upload>(rows[0].upload)
-    : undefined;
-  if (!upload) return undefined;
-
-  db.uploads = db.uploads.filter((item) => item.taskId !== taskId);
-  db.uploads.push(upload);
-  return upload;
+    db.uploads = db.uploads.filter((item) => item.taskId !== taskId);
+    db.uploads.push(upload);
+    return upload;
+  } catch {
+    markDurableReadUnavailable(readAvailabilityKey);
+    return undefined;
+  }
 }

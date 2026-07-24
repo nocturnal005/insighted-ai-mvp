@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { enterWorkspace } from "./actions";
@@ -26,17 +26,26 @@ export function WorkspaceCard({
   children: ReactNode;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isNavigating, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const pending = isSubmitting || isNavigating;
 
-  function handleEnter() {
-    startTransition(async () => {
-      try {
-        const destination = await enterWorkspace(userId, next);
+  async function handleEnter() {
+    if (pending) return;
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const destination = await enterWorkspace(userId, next);
+      startTransition(() => {
         router.push(destination);
-      } catch {
-        // Sign-in failed (e.g. demo mode disabled); leave the card clickable to retry.
-      }
-    });
+      });
+    } catch {
+      setError("We couldn't open this workspace. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -60,6 +69,14 @@ export function WorkspaceCard({
         >
           <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           Opening workspace…
+        </span>
+      )}
+      {error && (
+        <span
+          className="absolute inset-x-3 bottom-3 rounded-lg bg-critical-50 px-3 py-2 text-xs font-medium text-critical-700"
+          role="alert"
+        >
+          {error}
         </span>
       )}
     </button>
