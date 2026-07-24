@@ -2,7 +2,7 @@
  * Contract validation for the ABC Braille web adapter.
  *
  * Runs a local facsimile of ABC Braille's upload -> scan -> HTML results workflow,
- * boots InsightEd against it, and proves Run transcription persists the returned ordered
+ * boots Braivanta against it, and proves Run transcription persists the returned ordered
  * text exactly. No real pupil data and no internet connection are used.
  */
 import { spawn, spawnSync } from "node:child_process";
@@ -110,6 +110,11 @@ function startApp() {
         : "unicode.dis",
       DEMO_MODE: "true",
       ALLOW_REAL_PUPIL_DATA: "",
+      // This contract test uses an isolated local store and must not reach a
+      // developer's configured Neon database through .env.local.
+      DATABASE_URL: "",
+      POSTGRES_URL: "",
+      NEON_DATABASE_URL: "",
       INSIGHTED_DATA_DIR: DATA_DIR,
       INSIGHTED_NEXT_DIST_DIR: NEXT_DIST_DIR,
       INSIGHTED_TSCONFIG_PATH: NEXT_TSCONFIG,

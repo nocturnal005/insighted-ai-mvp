@@ -2,7 +2,7 @@
 
 An honest, client-safe summary of what this build does **not** yet do, so a demo sets accurate expectations. None of these blocks a demo in mock mode; they define the boundary between the current MVP and a production deployment.
 
-> **Core message:** InsightEd AI does not replace QTVIs, Braille-literate staff, or teachers. It produces AI/OCR drafts that are reviewed, corrected, approved, and audited by the right staff roles.
+> **Core message:** Braivanta does not replace QTVIs, Braille-literate staff, or teachers. It produces AI/OCR drafts that are reviewed, corrected, approved, and audited by the right staff roles.
 
 > **Data safety warning**
 >

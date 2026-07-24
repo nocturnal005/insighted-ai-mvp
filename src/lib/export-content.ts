@@ -119,7 +119,7 @@ export function buildExport(kind: ExportKind, id: string): { doc?: ExportDoc; er
 
 export function docToPlainText(doc: ExportDoc): string {
   const lines = [
-    "INSIGHTED AI",
+    "BRAIVANTA",
     doc.title,
     doc.subtitle,
     `Status: ${doc.status}`,
@@ -129,7 +129,7 @@ export function docToPlainText(doc: ExportDoc): string {
   for (const b of doc.blocks) {
     lines.push(b.heading.toUpperCase(), b.body, "");
   }
-  lines.push("-".repeat(60), `Exported ${new Date().toLocaleString("en-GB")} - InsightEd AI`);
+  lines.push("-".repeat(60), `Exported ${new Date().toLocaleString("en-GB")} - Braivanta`);
   return lines.join("\n");
 }
 

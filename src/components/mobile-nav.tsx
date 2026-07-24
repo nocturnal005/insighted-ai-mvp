@@ -60,9 +60,9 @@ export function MobileNav({ role }: { role: UserRole }) {
           >
             <div className="flex h-16 items-center gap-2.5 px-5">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-xs font-bold text-white">
-                iE
+                B
               </div>
-              <span className="font-semibold tracking-tight text-zinc-900">InsightEd AI</span>
+              <span className="font-semibold tracking-tight text-zinc-900">Braivanta</span>
               <button
                 type="button"
                 onClick={() => setOpenPath(null)}
