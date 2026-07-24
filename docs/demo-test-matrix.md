@@ -1,6 +1,6 @@
 # Demo Test Matrix
 
-A structured, end-to-end checklist for validating every core InsightEd AI feature in **demo mode** before a client walkthrough. Work through each group in order and record Pass/Fail.
+A structured, end-to-end checklist for validating every core Braivanta feature in **demo mode** before a client walkthrough. Work through each group in order and record Pass/Fail.
 
 > **Data safety warning**
 >

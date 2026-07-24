@@ -49,7 +49,7 @@ export default async function PrintPage(
         <header className="mb-6 border-b border-zinc-200 pb-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900">
             <span className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900 text-[11px] text-white">iE</span>
-            InsightEd AI
+            Braivanta
           </div>
           <h1 className="mt-4 text-2xl font-semibold tracking-tight text-zinc-900">{doc.title}</h1>
           <p className="mt-1 text-sm text-zinc-500">{doc.subtitle}</p>
@@ -68,7 +68,7 @@ export default async function PrintPage(
         </div>
 
         <footer className="mt-8 border-t border-zinc-200 pt-4 text-xs text-zinc-400">
-          Exported from InsightEd AI · AI-assisted, staff-verified · not for redistribution outside the school.
+          Exported from Braivanta · AI-assisted, staff-verified · not for redistribution outside the school.
         </footer>
       </article>
     </main>

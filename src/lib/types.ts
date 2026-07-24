@@ -1,4 +1,4 @@
-// Domain model for the InsightEd AI MVP.
+// Domain model for the Braivanta MVP.
 
 export type UserRole = "teaching_assistant" | "teacher" | "qtvi" | "senco" | "admin";
 

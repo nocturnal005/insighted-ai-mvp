@@ -1,6 +1,6 @@
 # Client Demo Script
 
-A 10–15 minute walkthrough for presenting InsightEd AI to school leaders, SENCOs, QTVIs, teaching assistants, subject teachers, and assistive-technology stakeholders. Designed to be delivered by a non-technical presenter running the app in **demo mode**.
+A 10–15 minute walkthrough for presenting Braivanta to school leaders, SENCOs, QTVIs, teaching assistants, subject teachers, and assistive-technology stakeholders. Designed to be delivered by a non-technical presenter running the app in **demo mode**.
 
 > **Data safety warning**
 >
@@ -8,7 +8,7 @@ A 10–15 minute walkthrough for presenting InsightEd AI to school leaders, SENC
 
 **Positioning to keep front of mind throughout:**
 
-> InsightEd AI does not replace QTVIs, Braille-literate staff, or teachers. It creates AI/OCR drafts that are reviewed, corrected, approved, and audited by the right staff roles.
+> Braivanta does not replace QTVIs, Braille-literate staff, or teachers. It creates AI/OCR drafts that are reviewed, corrected, approved, and audited by the right staff roles.
 
 ## Before the meeting (2 minutes, off-camera)
 
@@ -25,7 +25,7 @@ Timings below are a guide (≈13 minutes of content).
 
 ### 1. Opening message (1 min)
 
-> "Thank you for your time. InsightEd AI is a secure, human-verified workflow that helps your visual-impairment support team turn Braille work and visual materials into accessible, accurate outputs — faster, and with a full audit trail.
+> "Thank you for your time. Braivanta is a secure, human-verified workflow that helps your visual-impairment support team turn Braille work and visual materials into accessible, accurate outputs — faster, and with a full audit trail.
 >
 > The most important thing to know up front: this tool **does not replace** your QTVIs, your Braille-literate staff, or your teachers. It produces AI and OCR **drafts**. Those drafts are always reviewed, corrected, approved, and audited by the right member of staff before anything is used with a learner. What you'll see today is running in a safe demo mode with synthetic data — no real pupil information."
 
@@ -102,7 +102,7 @@ Timings below are a guide (≈13 minutes of content).
 
 ### 10. Closing message and known limitations (1 min)
 
-> "To summarise: InsightEd AI speeds up accessible-materials work while keeping your specialists firmly in control. Every AI output is a draft, Braille accuracy is always specialist-verified, assessment materials are answer-safe, exports are gated on approval, and everything is audited.
+> "To summarise: Braivanta speeds up accessible-materials work while keeping your specialists firmly in control. Every AI output is a draft, Braille accuracy is always specialist-verified, assessment materials are answer-safe, exports are gated on approval, and everything is audited.
 >
 > To be transparent about today's demo:
 > - It runs in **demo mode** with **synthetic data** — it is not for identifiable pupil data or live assessment materials without your data-protection approval.

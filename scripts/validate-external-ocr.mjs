@@ -1,7 +1,7 @@
 /**
  * External Braille OCR integration guardrails (Stage 3D-C).
  *
- * Behavioural validation of the InsightEd AI <-> external_braille_ocr contract and the
+ * Behavioural validation of the Braivanta <-> external_braille_ocr contract and the
  * human-verification workflow, WITHOUT the real OCR engine: the script runs a local mock
  * engine endpoint, boots the app against it, and drives the real server actions with
  * role-scoped sessions.
@@ -128,6 +128,11 @@ function startApp() {
       BRAILLE_OCR_TIMEOUT_MS: "10000",
       DEMO_MODE: "true",
       ALLOW_REAL_PUPIL_DATA: "", // never needed: guardrail tasks are not pupil-linked
+      // This validator exercises the local fallback only. Never inherit a developer's
+      // Neon connection from .env.local, which would make the test depend on network access.
+      DATABASE_URL: "",
+      POSTGRES_URL: "",
+      NEON_DATABASE_URL: "",
       INSIGHTED_DATA_DIR: DATA_DIR, // isolated throwaway store (never the demo data)
       INSIGHTED_NEXT_DIST_DIR: NEXT_DIST_DIR,
       INSIGHTED_TSCONFIG_PATH: NEXT_TSCONFIG,

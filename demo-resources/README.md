@@ -1,6 +1,6 @@
 # Demo Resources
 
-Local, non-committed test files used to demonstrate and validate InsightEd AI in **demo mode**.
+Local, non-committed test files used to demonstrate and validate Braivanta in **demo mode**.
 
 > **Data safety warning**
 >

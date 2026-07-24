@@ -76,24 +76,24 @@ const WORKSPACE_CARDS: WorkspaceCard[] = [
 function SiteHeader() {
   return (
     <header className="relative z-20 flex h-[77px] w-full items-center border-b border-white/10 bg-[#071d42] px-6 sm:px-[30px]">
-      <div className="flex w-full items-center justify-between">
-        <span className="font-display text-[22px] font-bold tracking-[-0.03em] text-white sm:text-[26px]">InsightEd AI</span>
-        <div className="flex items-center gap-3">
-          <div className="hidden h-8 items-center gap-2.5 rounded-full border border-white/20 bg-[#061a39] px-3.5 shadow-sm sm:flex">
+      <div className="flex w-full items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4 sm:gap-9">
+          <span className="text-[26px] font-bold tracking-[-0.05em] text-white sm:text-[34px]">Braivanta</span>
+          <div className="hidden h-9 items-center gap-2.5 rounded-full border border-white/15 bg-white/10 px-3.5 shadow-sm sm:flex">
             <span className="relative flex h-2 w-2" aria-hidden="true">
               <span className="absolute inline-flex h-full w-full rounded-full bg-[#8ff1bb] opacity-40" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-[#8ff1bb]" />
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-white">System Status: Online</span>
+            <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-white">System Status: <span className="text-[#8ff1bb]">Online</span></span>
           </div>
-          <a
-            href="#profiles"
-            className="flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-white/15 focus-visible:ring-[#8ff1bb] focus-visible:ring-offset-[#071d42] sm:min-h-[45px]"
-          >
-            <UserIcon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={2} />
-            Login
-          </a>
         </div>
+        <a
+          href="#profiles"
+          className="flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-white px-5 py-2 text-sm font-bold text-[#07172f] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#eef4ff] focus-visible:ring-[#8ff1bb] focus-visible:ring-offset-[#071d42] sm:min-h-[45px]"
+        >
+          <UserIcon className="h-[18px] w-[18px]" aria-hidden="true" strokeWidth={2} />
+          Login
+        </a>
       </div>
     </header>
   );
@@ -130,7 +130,7 @@ function Hero() {
           </p>
           <a
             href="#profiles"
-            className="inline-flex min-h-16 min-w-[167px] items-center justify-center rounded-[8px] bg-[#e2e9fb] px-8 py-3 text-base font-semibold text-[#07172f] shadow-[0_8px_24px_rgba(0,0,0,0.10)] transition hover:-translate-y-0.5 hover:bg-white focus-visible:ring-[#8ff1bb] focus-visible:ring-offset-[#071d42]"
+            className="inline-flex min-h-14 min-w-[155px] items-center justify-center rounded-full bg-[#b9dcff] px-8 py-3 text-base font-semibold text-[#07172f] shadow-[0_8px_24px_rgba(0,0,0,0.10)] transition hover:-translate-y-0.5 hover:bg-white focus-visible:ring-[#8ff1bb] focus-visible:ring-offset-[#071d42]"
           >
             Get Started
           </a>
@@ -213,8 +213,8 @@ function SiteFooter() {
     <footer className="w-full border-t border-[#c4c6cf] bg-white px-6 py-8">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-center md:flex-row md:text-left">
         <div className="flex flex-col gap-1">
-          <span className="font-display text-lg font-bold text-[#002147]">InsightEd AI</span>
-          <span className="text-xs text-[#44474e]">© 2026 InsightEd AI. Designed for UK school accessibility workflows.</span>
+          <span className="text-lg font-bold tracking-[-0.04em] text-[#002147]">Braivanta</span>
+          <span className="text-xs text-[#44474e]">© 2026 Braivanta. Designed for UK school accessibility workflows.</span>
         </div>
         <div className="flex flex-col items-center gap-3 md:items-end">
           <div className="flex items-center gap-1">
@@ -222,7 +222,7 @@ function SiteFooter() {
               <a
                 key={social.label}
                 href={social.href}
-                aria-label={`InsightEd AI on ${social.label}`}
+                aria-label={`Braivanta on ${social.label}`}
                 className="rounded-full p-2 text-[#44474e] transition-colors hover:bg-[#eef4ff] hover:text-[#002147]"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">

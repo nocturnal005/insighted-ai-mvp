@@ -1,8 +1,8 @@
-# InsightEd AI MVP
+# Braivanta MVP
 
 > Secure, human-verified accessibility workflow for visual impairment education teams.
 
-InsightEd AI is a controlled-demo and pilot-readiness MVP for mainstream secondary school VI support workflows. The workflow mechanics are functional: role checks, specialist verification, teacher feedback approval, audit logging, exports, durable Neon-backed task persistence when configured, upload metadata, and retention deletion.
+Braivanta is a controlled-demo and pilot-readiness MVP for mainstream secondary school VI support workflows. The workflow mechanics are functional: role checks, specialist verification, teacher feedback approval, audit logging, exports, durable Neon-backed task persistence when configured, upload metadata, and retention deletion.
 
 The AI/OCR layer is provider-based. The recommended live path sends an unlinked PNG/JPEG to ABC Braille for the primary draft, optionally compares its detected cells with Liblouis, and asks OpenAI for structured discrepancy evidence. OpenAI never replaces the ABC draft or applies a correction. Explicit mock, ABC-only, OpenAI-draft, and external JSON OCR providers remain available. Every output is a draft, and Braille accuracy always requires specialist verification before teacher feedback or export.
 
@@ -116,7 +116,7 @@ Additional hybrid components:
 
 ### ABC Braille image-to-text workflow
 
-When `BRAILLE_OCR_PROVIDER=abc_braille_web`, one explicit **Run transcription** click uploads the task image to ABC Braille, requests its UEB Grade 2 translation, and copies the ordered `Text translation` lines into `draftText` separated by newlines. InsightEd does not summarise, correct, or send that result through another model. ABC Braille supplies no numeric confidence score, so the UI says **Confidence not supplied**.
+When `BRAILLE_OCR_PROVIDER=abc_braille_web`, one explicit **Run transcription** click uploads the task image to ABC Braille, requests its UEB Grade 2 translation, and copies the ordered `Text translation` lines into `draftText` separated by newlines. Braivanta does not summarise, correct, or send that result through another model. ABC Braille supplies no numeric confidence score, so the UI says **Confidence not supplied**.
 
 ABC Braille currently publishes this capability as a website rather than a documented JSON API. The adapter is therefore a provisional HTML-workflow integration and could need maintenance if the site changes. Obtain ABC Braille's permission and complete privacy/data-processing review before production use; the contact published on its site is `hello@abcbraille.com`. Keep `ALLOW_REAL_PUPIL_DATA=false` unless the school has explicitly approved the transfer. The public site describes the tool and its intended use on the [ABC Braille homepage](https://www.abcbraille.com/) and [About page](https://www.abcbraille.com/about).
 
@@ -150,7 +150,7 @@ A missing endpoint returns a `provider_unavailable` draft; a failed call returns
 A dedicated draft-only Braille OCR engine exists as a **separate standalone project**
 (`insighted-braille-ocr-engine`, developed at `D:\insighted-braille-ocr-engine` /
 [github.com/nocturnal005/insighted-braille-ocr-engine](https://github.com/nocturnal005/insighted-braille-ocr-engine)).
-It is never bundled into this app; InsightEd AI connects to it only through the
+It is never bundled into this app; Braivanta connects to it only through the
 `external_braille_ocr` adapter above.
 
 Key points:
@@ -322,7 +322,7 @@ Work through [`docs/demo-test-matrix.md`](docs/demo-test-matrix.md) group by gro
 
 Follow [`docs/client-demo-script.md`](docs/client-demo-script.md) — a 10–15 minute, role-by-role walkthrough written for school leaders, SENCOs, QTVIs, and assistive-technology stakeholders. Before presenting, run the [`docs/demo-readiness-checklist.md`](docs/demo-readiness-checklist.md) and the validation commands (`typecheck`, `build`, `validate:mvp`, `validate:ai`, `validate:demo`).
 
-Positioning to hold throughout: **InsightEd AI does not replace QTVIs, Braille-literate staff, or teachers. It creates AI/OCR drafts that are reviewed, corrected, approved, and audited by the right staff roles.**
+Positioning to hold throughout: **Braivanta does not replace QTVIs, Braille-literate staff, or teachers. It creates AI/OCR drafts that are reviewed, corrected, approved, and audited by the right staff roles.**
 
 ### Validation commands
 

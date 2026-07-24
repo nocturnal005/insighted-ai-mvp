@@ -1,8 +1,8 @@
 {
-  "name": "insighted-ai-mvp",
+  "name": "braivanta-mvp",
   "version": "1.0.0",
   "private": true,
-  "description": "InsightEd AI — runnable MVP. Secure, human-verified accessibility workflow for VI education teams.",
+  "description": "Braivanta — runnable MVP. Secure, human-verified accessibility workflow for VI education teams.",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",

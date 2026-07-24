@@ -51,7 +51,7 @@ const checks = [
     file: "docs/client-demo-script.md",
     mustContain: [
       DATA_SAFETY,
-      "InsightEd AI does not replace QTVIs, Braille-literate staff, or teachers",
+      "Braivanta does not replace QTVIs, Braille-literate staff, or teachers",
     ],
   },
   {
