@@ -9,7 +9,7 @@ npm-debug.log*
 .env
 .env.local
 .env*.local
-.insighted-data/
+.braivanta-data/
 .npm-cache/
 .tools/
 tsconfig.tsbuildinfo

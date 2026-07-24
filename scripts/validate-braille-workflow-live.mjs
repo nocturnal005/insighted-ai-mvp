@@ -29,7 +29,7 @@ if (
   process.exit(1);
 }
 
-const dataDir = mkdtempSync(path.join(os.tmpdir(), "insighted-braille-live-"));
+const dataDir = mkdtempSync(path.join(os.tmpdir(), "braivanta-braille-live-"));
 const nextDistDir = `.next-validate-braille-live-${process.pid}`;
 const nextTsConfig = `.tsconfig-validate-braille-live-${process.pid}.json`;
 writeFileSync(
@@ -66,9 +66,9 @@ function startApp() {
       DATABASE_URL: "",
       POSTGRES_URL: "",
       NEON_DATABASE_URL: "",
-      INSIGHTED_DATA_DIR: dataDir,
-      INSIGHTED_NEXT_DIST_DIR: nextDistDir,
-      INSIGHTED_TSCONFIG_PATH: nextTsConfig,
+      BRAIVANTA_DATA_DIR: dataDir,
+      BRAIVANTA_NEXT_DIST_DIR: nextDistDir,
+      BRAIVANTA_TSCONFIG_PATH: nextTsConfig,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -144,7 +144,7 @@ function brailleActionIds() {
 }
 
 class Session {
-  cookie = "insighted_session=u_amelia";
+  cookie = "braivanta_session=u_amelia";
 
   headers(extra = {}) {
     return { Origin: base, Cookie: this.cookie, ...extra };

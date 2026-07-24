@@ -108,7 +108,7 @@ const checks = [
   },
   {
     file: "src/lib/store.ts",
-    mustContain: [".insighted-data", "purgeExpiredUploads", "storagePath"],
+    mustContain: [".braivanta-data", "purgeExpiredUploads", "storagePath"],
   },
   {
     file: "src/lib/durable-demo.ts",
@@ -138,7 +138,7 @@ const checks = [
   },
   {
     file: "scripts/reset-demo.mjs",
-    mustContain: [".insighted-data", "rmSync"],
+    mustContain: [".braivanta-data", "rmSync"],
   },
 ];
 

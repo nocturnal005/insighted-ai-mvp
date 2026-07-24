@@ -25,8 +25,8 @@ interface StoredDetailRow extends StoredTaskRow {
   audit: AuditEntry[] | string;
 }
 
-const schemaPromiseKey = "__insighted_demo_schema";
-const readAvailabilityKey = "__insighted_demo_read_availability";
+const schemaPromiseKey = "__braivanta_demo_schema";
+const readAvailabilityKey = "__braivanta_demo_read_availability";
 
 function databaseUrl(): string | null {
   return (

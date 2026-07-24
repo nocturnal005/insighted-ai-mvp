@@ -36,9 +36,9 @@ interface Db {
 }
 
 const ORG = "org_northgate";
-// INSIGHTED_DATA_DIR lets validation harnesses run against an isolated throwaway
+// BRAIVANTA_DATA_DIR lets validation harnesses run against an isolated throwaway
 // store instead of the local demo data. Unset in normal use.
-const DATA_DIR = process.env.INSIGHTED_DATA_DIR || join(process.cwd(), ".insighted-data");
+const DATA_DIR = process.env.BRAIVANTA_DATA_DIR || join(process.cwd(), ".braivanta-data");
 const UPLOAD_DIR = join(DATA_DIR, "uploads");
 const DB_FILE = join(DATA_DIR, "db.json");
 
@@ -258,8 +258,8 @@ function seed(): Db {
 }
 
 ensureDataDirs();
-const g = globalThis as unknown as { __insighted_db?: Db };
-export const db: Db = g.__insighted_db ?? (g.__insighted_db = loadPersistedDb() ?? seed());
+const g = globalThis as unknown as { __braivanta_db?: Db };
+export const db: Db = g.__braivanta_db ?? (g.__braivanta_db = loadPersistedDb() ?? seed());
 if (!existsSync(DB_FILE)) saveDb();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
