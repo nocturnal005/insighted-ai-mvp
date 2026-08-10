@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { ScanText, Clock, CheckCircle2, XCircle, Plus, ArrowUpRight } from "lucide-react";
+import { ScanText, Plus, ArrowUpRight } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { ROLE_LABELS } from "@/lib/rbac";
 import { getDashboardStats } from "@/lib/data";
@@ -8,6 +8,7 @@ import { pupilLabel } from "@/lib/store";
 import { Card } from "@/components/ui/card";
 import { TaskBadge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
+import { SubmissionWorkflow } from "@/components/submission-workflow";
 import { formatRelative } from "@/lib/utils";
 import { hydrateBrailleTasks } from "@/lib/durable-braille";
 import { hydrateStemTasks, hydrateVisualTasks } from "@/lib/durable-demo";
@@ -22,13 +23,13 @@ export default async function DashboardPage() {
     <>
       <PageHeader
         title={`Good to see you, ${ROLE_LABELS[user.role]}`}
-        description="Here is what needs your team's attention today."
+        description="Continue a submission or start the focused three-stage Braille workflow."
         action={
           <Link
             href="/braille/new"
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
           >
-            <Plus className="h-4 w-4" /> New Braille Review
+            <Plus className="h-4 w-4" /> Start upload
           </Link>
         }
       />
@@ -54,18 +55,19 @@ async function DashboardOverview() {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat icon={ScanText} label="Active tasks" value={stats.active} />
-        <Stat icon={Clock} label="Awaiting review" value={stats.awaitingReview} tone="caution" />
-        <Stat icon={CheckCircle2} label="Approved" value={stats.approved} tone="positive" />
-        <Stat icon={XCircle} label="Rejected" value={stats.rejected} tone="critical" />
-      </div>
+      <section aria-labelledby="workflow-heading">
+        <h2 id="workflow-heading" className="mb-3 text-[15px] font-semibold text-zinc-900">How every submission moves forward</h2>
+        <SubmissionWorkflow />
+      </section>
 
       <Card className="mt-6">
         <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-zinc-900">Recent activity</h2>
+          <div>
+            <h2 className="text-[15px] font-semibold text-zinc-900">Continue a submission</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">Open the next piece of learner work that needs attention.</p>
+          </div>
           <Link href="/braille" className="inline-flex items-center gap-1 text-[13px] text-zinc-500 hover:text-zinc-900">
-            View all <ArrowUpRight className="h-3.5 w-3.5" />
+            View submissions <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
         {stats.recent.length === 0 ? (
@@ -96,46 +98,12 @@ async function DashboardOverview() {
   );
 }
 
-/** Skeleton for the stat grid + recent card, shown while the Neon read resolves. */
+/** Skeleton for the workflow orientation + submission list, shown while the Neon read resolves. */
 function DashboardOverviewSkeleton() {
   return (
     <>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="h-28 animate-pulse rounded-2xl bg-white shadow-subtle" />
-        ))}
-      </div>
+      <div className="h-24 animate-pulse rounded-2xl bg-white shadow-subtle" />
       <div className="mt-6 h-64 animate-pulse rounded-2xl bg-white shadow-subtle" />
     </>
-  );
-}
-
-function Stat({
-  icon: Icon,
-  label,
-  value,
-  tone = "accent",
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: number;
-  tone?: "accent" | "caution" | "positive" | "critical";
-}) {
-  const tones = {
-    accent: "bg-accent-50 text-accent-600",
-    caution: "bg-caution-50 text-caution-600",
-    positive: "bg-positive-50 text-positive-600",
-    critical: "bg-critical-50 text-critical-600",
-  } as const;
-  return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${tones[tone]}`}>
-          <Icon className="h-[18px] w-[18px]" />
-        </span>
-      </div>
-      <p className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900">{value}</p>
-      <p className="mt-0.5 text-sm text-zinc-500">{label}</p>
-    </Card>
   );
 }

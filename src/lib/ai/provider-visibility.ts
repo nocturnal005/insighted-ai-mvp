@@ -1,4 +1,4 @@
-import type { BrailleTask } from "@/lib/types";
+import type { AuditEntry, BrailleTask } from "@/lib/types";
 
 /**
  * Provider identifiers in this set are operational implementation details. They remain
@@ -30,4 +30,16 @@ export function redactPrivateBrailleProvenance(task: BrailleTask): BrailleTask {
       review: transcription.review ? { ...transcription.review, model: null } : transcription.review,
     },
   };
+}
+
+/**
+ * Audit entries are rendered inside a Client Component on the review page, so redact
+ * private implementation identifiers before the entries cross that boundary too.
+ */
+export function redactPrivateAuditProvenance(entries: AuditEntry[]): AuditEntry[] {
+  return entries.map((entry) =>
+    isPrivateProviderIdentity(entry.provider)
+      ? { ...entry, provider: null, model: null, promptVersion: null }
+      : entry,
+  );
 }

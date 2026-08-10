@@ -17,7 +17,7 @@ export interface NavItem {
 /** Single source of truth for primary navigation, shared by the desktop sidebar and mobile drawer. */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/braille", label: "Braille Work Review", icon: ScanText },
+  { href: "/braille", label: "Braille Submissions", icon: ScanText },
   { href: "/assessment", label: "Assessment-Safe", icon: ImageIcon },
   { href: "/stem", label: "STEM Support", icon: Layers },
   { href: "/pupils", label: "Pupil Records", icon: Users },

@@ -14,6 +14,7 @@ function configuredMetadataBase(): URL {
 
 export const metadata: Metadata = {
   metadataBase: configuredMetadataBase(),
+  applicationName: "Braivanta",
   title: "Braivanta",
   description,
   openGraph: {
