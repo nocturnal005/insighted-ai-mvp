@@ -23,10 +23,12 @@ This audit records the confidence and uncertainty evidence that the Braivanta Br
 - Provider or reviewer categorical severity maps directly to `review_suggested` or `review_required`; there is no hidden percentage conversion.
 - `high` source severity becomes `review_required`. `low` and `medium` become `review_suggested`. These are review-routing states, not scientific accuracy grades.
 - The universal specialist-verification requirement remains a workflow gate and is not itself passage confidence.
+- Quality evaluation stores and aggregates a numeric `EvalSample.confidence` only for `provider_score` evidence. Hybrid character agreement remains in `primaryLiblouisAgreement` and is labelled separately as engine agreement.
+- High-priority issues that cannot be mapped uniquely retain their reason for whole-document specialist review; Braivanta does not invent a text range.
 
 ## Persistence and compatibility
 
-Stage 2 fields are additive members inside the existing JSONB task document. No SQL table or column migration is required. Missing `confidenceEvidence` or `reviewItems` values are valid and render as confidence unavailable with the existing whole-document review workflow intact.
+Stage 2 fields are additive members inside the existing JSONB task document. No SQL table or column migration is required. Missing `confidenceEvidence`, `reviewItems`, `additionalReviewIssues`, or evaluation evidence-kind values are valid. Historical tasks retain the whole-document review workflow, and historical evaluation numbers without a proven provider-score kind are excluded from provider-score aggregates.
 
 ## Deliberately unavailable or deferred
 

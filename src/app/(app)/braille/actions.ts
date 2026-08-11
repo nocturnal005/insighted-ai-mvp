@@ -11,8 +11,11 @@ import { transcribeBraille, mapFlagsToLowConfidenceRegions, summariseFlags, toSt
 import { assertVisionImageUpload } from "@/lib/upload-guard";
 import { generateFeedback } from "@/lib/feedback";
 import type { BrailleTask, TranscriptionReviewStatus } from "@/lib/types";
+import { closedTaskError, planReviewItemMutation } from "@/lib/verification/review-guards";
 import {
   buildTranscriptionReviewItems,
+  buildUnmappedHighPriorityIssues,
+  remapReviewItemsAfterWholeDocumentEdit,
   storedConfidenceEvidence,
   unresolvedRequiredReviewItems,
 } from "@/lib/verification/confidence";
@@ -106,6 +109,7 @@ async function executeTranscription(
 
   const regions = mapFlagsToLowConfidenceRegions(result.flags);
   const confidenceEvidence = storedConfidenceEvidence(result);
+  const reviewItems = buildTranscriptionReviewItems(result);
   task.transcription = {
     draftText: result.draftText,
     editedText: result.draftText,
@@ -114,7 +118,8 @@ async function executeTranscription(
     confidence: result.confidence,
     confidenceBasis: result.confidenceBasis,
     confidenceEvidence,
-    reviewItems: buildTranscriptionReviewItems(result),
+    reviewItems,
+    additionalReviewIssues: buildUnmappedHighPriorityIssues(result),
     lowConfidenceRegions: regions,
     engine: result.meta.model,
     specialistVerifiedBy: null,
@@ -207,9 +212,16 @@ export async function saveTranscription(taskId: string, editedText: string) {
   if (!can(user.role, "transcription.edit")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription) throw new Error("Nothing to edit");
+  const closed = closedTaskError(task.status);
+  if (closed) throw new Error(closed);
   if (task.transcription.status === "specialist_verified") throw new Error("Already verified and locked");
-  if ((task.transcription.reviewItems ?? []).length > 0) {
-    throw new Error("Use the contextual passage review controls so uncertainty evidence remains attached to the correct text");
+  const reviewItems = task.transcription.reviewItems ?? [];
+  if (reviewItems.length > 0) {
+    task.transcription.reviewItems = remapReviewItemsAfterWholeDocumentEdit(
+      task.transcription.editedText,
+      editedText,
+      reviewItems,
+    );
   }
 
   task.transcription.editedText = editedText;
@@ -245,44 +257,30 @@ export async function reviewTranscriptionItem(
   const task = await hydrateBrailleTask(taskId);
   const transcription = task?.transcription;
   if (!task || !transcription) throw new Error("Nothing to review");
-  if (transcription.status === "specialist_verified") throw new Error("Already verified and locked");
-  const items = transcription.reviewItems ?? [];
-  const item = items.find((candidate) => candidate.id === itemId);
-  if (!item) throw new Error("Review item not found");
 
-  const currentSlice = transcription.editedText.slice(item.start, item.end);
-  if (currentSlice !== item.reviewedText) {
-    throw new Error("This passage changed after it was selected. Reload and review the latest text.");
-  }
+  // Every rule about WHETHER this review may happen, and what it changes, lives in
+  // planReviewItemMutation — including the closed-task lifecycle boundary and the
+  // corrected/confirmed distinction. This action applies the plan; it does not restate it.
+  const reviewedAt = new Date().toISOString();
+  const plan = planReviewItemMutation({
+    taskStatus: task.status,
+    transcriptionStatus: transcription.status,
+    editedText: transcription.editedText,
+    items: transcription.reviewItems ?? [],
+    itemId,
+    nextStatus,
+    submittedText: reviewedText,
+    reviewerNote,
+    reviewedBy: user.id,
+    reviewedAt,
+  });
+  if (!plan.ok) throw new Error(plan.error);
 
-  const replacement = nextStatus === "corrected" ? reviewedText : item.reviewedText;
-  if (nextStatus === "corrected" && !replacement.trim()) {
-    throw new Error("Corrected translation text is required");
-  }
-
-  if (nextStatus === "corrected") {
-    transcription.editedText =
-      transcription.editedText.slice(0, item.start) +
-      replacement +
-      transcription.editedText.slice(item.end);
-    const delta = replacement.length - item.reviewedText.length;
-    const oldEnd = item.end;
-    item.reviewedText = replacement;
-    item.end = item.start + replacement.length;
-    for (const candidate of items) {
-      if (candidate.id !== item.id && candidate.start >= oldEnd) {
-        candidate.start += delta;
-        candidate.end += delta;
-      }
-    }
-  }
-
-  const previousStatus = item.reviewStatus;
-  item.reviewStatus = nextStatus;
-  item.reviewerNote = reviewerNote.trim();
-  item.reviewedBy = user.id;
-  item.reviewedAt = new Date().toISOString();
-  task.updatedAt = item.reviewedAt;
+  transcription.editedText = plan.editedText;
+  transcription.reviewItems = plan.items;
+  const previousStatus = plan.previousStatus;
+  const item = plan.items.find((candidate) => candidate.id === itemId)!;
+  task.updatedAt = reviewedAt;
 
   recordAudit({
     actorId: user.id,

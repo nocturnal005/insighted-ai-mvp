@@ -17,3 +17,12 @@ tsconfig.tsbuildinfo
 .idea
 .vercel
 .env*
+# Compiled Python caches from the local OCR helper. Never a build input.
+__pycache__/
+*.pyc
+
+# Throwaway build/tsconfig artefacts from validate:external-ocr. Its cleanup is
+# best-effort and can be blocked by a file lock on Windows, so they are ignored
+# rather than left to be committed or linted.
+.next-validate-external-*
+.tsconfig-validate-external-*

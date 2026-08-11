@@ -54,6 +54,9 @@ const RAW_BODY_MARKER = "RAW-PROVIDER-BODY-MARKER-9c4e";
 const VERIFIED_FLAG_TEXT = "checked phrase 9f3e";
 const VERIFIED_FINAL = MOCK_DRAFT.replace(MOCK_FLAG_TEXT, VERIFIED_FLAG_TEXT);
 const TEACHER_COMMENTS = "Guardrail teacher feedback comments 51ad.";
+const UNMAPPABLE_TEXT = "repeated OCR phrase 4ac1";
+const UNMAPPABLE_DRAFT = `${UNMAPPABLE_TEXT} middle ${UNMAPPABLE_TEXT}`;
+const UNMAPPABLE_REASON = "High-priority repeated OCR evidence requires whole-document inspection.";
 
 const DRAFT_WARNING =
   "This draft transcription must be checked by a QTVI or Braille-literate specialist before teacher feedback or export.";
@@ -98,16 +101,20 @@ function startMockEngine() {
         return;
       }
 
+      const unmappable = (parsed.title ?? "").includes("UNMAPPABLE-HIGH");
+      const draftText = unmappable ? UNMAPPABLE_DRAFT : MOCK_DRAFT;
+      const flagText = unmappable ? UNMAPPABLE_TEXT : MOCK_FLAG_TEXT;
+      const flagReason = unmappable ? UNMAPPABLE_REASON : MOCK_FLAG_REASON;
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
-          draftText: MOCK_DRAFT,
+          draftText,
           confidence: 1.4, // deliberately out of range: the adapter must clamp to [0,1]
           rawBraille: "⠍⠕⠉⠅",
           rawCells: [{ line: 1, cellIndex: 1, dots: [1, 3, 4], bbox: [10, 10, 30, 40], confidence: 0.9 }],
           providerRequestId: "mock_req_guardrail_001",
-          flags: [{ text: MOCK_FLAG_TEXT, reason: MOCK_FLAG_REASON, category: "low_ocr_confidence", severity: "high" }],
-          pageResults: [{ pageNumber: 1, text: MOCK_DRAFT, confidence: 0.9, flags: [] }],
+          flags: [{ text: flagText, reason: flagReason, category: "low_ocr_confidence", severity: "high" }],
+          pageResults: [{ pageNumber: 1, text: draftText, confidence: 0.9, flags: [] }],
           // Extra field a real engine might send. It must never be stored or surfaced:
           secretRawMarker: RAW_BODY_MARKER,
         }),
@@ -398,6 +405,16 @@ async function main() {
       "Final wording checked against the source.",
     ]);
 
+    r = await qtvi.invoke(taskPath, ids.reviewTranscriptionItem, [
+      taskId,
+      REVIEW_ITEM_ID,
+      "confirmed",
+      VERIFIED_FLAG_TEXT,
+      "Must remain corrected.",
+    ]);
+    page = await (await qtvi.get(taskPath)).text();
+    check("corrected passage cannot be relabelled confirmed", page.includes(`aria-label="Corrected: ${VERIFIED_FLAG_TEXT}"`), `status=${r.status}`);
+
     r = await teacher.invoke(taskPath, ids.createFeedback, [taskId]);
     page = await (await teacher.get(taskPath)).text();
     check("feedback blocked before specialist verification", !page.includes("AI draft · editable"));
@@ -534,6 +551,93 @@ async function main() {
     correctionPage = await (await qtvi.get(correctionPath)).text();
     check("resolved required-review item permits final verification", correctionPage.includes("Verified and locked"), `status=${r.status}`);
 
+    // ---- F. Whole-document fallback preserves contextual anchors ----------------
+    section("F. Whole-document editing preserves marked passage semantics");
+    const wholeEditPath = await ta.createTask("Stage 2 whole-document edit validation task");
+    const wholeEditTaskId = wholeEditPath.split("/").pop();
+    await (await ta.get(wholeEditPath)).text();
+    await ta.invoke(wholeEditPath, ids.runTranscription, [wholeEditTaskId]);
+    let wholeEditPage = await (await qtvi.get(wholeEditPath)).text();
+    check("authorised editor retains progressive full-transcription control", wholeEditPage.includes("Edit full transcription"));
+    await qtvi.invoke(wholeEditPath, ids.reviewTranscriptionItem, [
+      wholeEditTaskId,
+      REVIEW_ITEM_ID,
+      "confirmed",
+      "unsaved passage edit",
+      "Must not discard unsaved text",
+    ]);
+    let wholeEditDb = JSON.parse(readFileSync(path.join(DATA_DIR, "db.json"), "utf8"));
+    let wholeEditTask = wholeEditDb.brailleTasks.find((task) => task.id === wholeEditTaskId);
+    let wholeEditItem = wholeEditTask?.transcription?.reviewItems?.[0];
+    check("confirm rejects unsaved passage text", wholeEditItem?.reviewStatus === "unreviewed" && wholeEditItem?.reviewedText === MOCK_FLAG_TEXT);
+    const unflaggedEdit = MOCK_DRAFT.replace("stable words", "carefully checked stable words");
+    r = await qtvi.invoke(wholeEditPath, ids.saveTranscription, [wholeEditTaskId, unflaggedEdit]);
+    wholeEditPage = await (await qtvi.get(wholeEditPath)).text();
+    check("specialist can edit an unflagged whole-document passage", wholeEditPage.includes("carefully checked stable words"), `status=${r.status}`);
+    check("contextual review remains mapped after whole-document edit", wholeEditPage.includes(`aria-label="Review required: ${MOCK_FLAG_TEXT}"`));
+
+    wholeEditDb = JSON.parse(readFileSync(path.join(DATA_DIR, "db.json"), "utf8"));
+    wholeEditTask = wholeEditDb.brailleTasks.find((task) => task.id === wholeEditTaskId);
+    wholeEditItem = wholeEditTask?.transcription?.reviewItems?.[0];
+    check("whole-document edit persists after reload", wholeEditTask?.transcription?.editedText === unflaggedEdit);
+    check("whole-document edit updates the review-item offset", wholeEditItem?.start === unflaggedEdit.indexOf(MOCK_FLAG_TEXT));
+    check("whole-document edit preserves review status", wholeEditItem?.reviewStatus === "unreviewed");
+    check("whole-document edit preserves machine passage", wholeEditItem?.machineText === MOCK_FLAG_TEXT);
+
+    const forbiddenFlagEdit = unflaggedEdit.replace(MOCK_FLAG_TEXT, "changed outside contextual control");
+    r = await qtvi.invoke(wholeEditPath, ids.saveTranscription, [wholeEditTaskId, forbiddenFlagEdit]);
+    wholeEditPage = await (await qtvi.get(wholeEditPath)).text();
+    wholeEditDb = JSON.parse(readFileSync(path.join(DATA_DIR, "db.json"), "utf8"));
+    wholeEditTask = wholeEditDb.brailleTasks.find((task) => task.id === wholeEditTaskId);
+    check("whole-document editor rejects a flagged-passage change", wholeEditTask?.transcription?.editedText === unflaggedEdit && !wholeEditPage.includes("changed outside contextual control"), `status=${r.status}`);
+
+    // ---- G. Unmappable high-priority evidence remains visible -------------------
+    section("G. Unmappable high-priority evidence remains visible");
+    const unmappablePath = await ta.createTask("Stage 2 UNMAPPABLE-HIGH validation task");
+    const unmappableTaskId = unmappablePath.split("/").pop();
+    await (await ta.get(unmappablePath)).text();
+    await ta.invoke(unmappablePath, ids.runTranscription, [unmappableTaskId]);
+    const unmappablePage = await (await qtvi.get(unmappablePath)).text();
+    check("ambiguous repeated excerpt creates no false contextual highlight", !unmappablePage.includes(`aria-label="Review required: ${UNMAPPABLE_TEXT}"`));
+    check("unmappable issue creates no guessed review context", !unmappablePage.includes("Select a marked passage"));
+    check("unmappable high-priority reason remains visible", unmappablePage.includes("Additional review issues") && unmappablePage.includes(UNMAPPABLE_REASON));
+
+    // ---- H. Closed task lifecycle is enforced by server actions -----------------
+    section("H. Closed tasks reject specialist passage mutations");
+    for (const closedStatus of ["rejected", "archived"]) {
+      const closedPath = await ta.createTask(`Stage 2 ${closedStatus} mutation validation task`);
+      const closedTaskId = closedPath.split("/").pop();
+      await (await ta.get(closedPath)).text();
+      await ta.invoke(closedPath, ids.runTranscription, [closedTaskId]);
+      if (closedStatus === "rejected") {
+        await qtvi.invoke(closedPath, ids.rejectBrailleTask, [closedTaskId, "Synthetic lifecycle test"]);
+      } else {
+        await qtvi.invoke(closedPath, ids.archiveBrailleTask, [closedTaskId]);
+      }
+      for (const [nextStatus, text] of [
+        ["confirmed", MOCK_FLAG_TEXT],
+        ["corrected", "forbidden closed correction"],
+        ["needs_rescan", MOCK_FLAG_TEXT],
+      ]) {
+        await qtvi.invoke(closedPath, ids.reviewTranscriptionItem, [
+          closedTaskId,
+          REVIEW_ITEM_ID,
+          nextStatus,
+          text,
+          "Must be blocked after closure",
+        ]);
+      }
+      const closedDb = JSON.parse(readFileSync(path.join(DATA_DIR, "db.json"), "utf8"));
+      const closedTask = closedDb.brailleTasks.find((task) => task.id === closedTaskId);
+      const closedItem = closedTask?.transcription?.reviewItems?.[0];
+      check(
+        `${closedStatus} task blocks confirm, correct, and re-scan mutations`,
+        closedTask?.status === closedStatus &&
+          closedItem?.reviewStatus === "unreviewed" &&
+          closedItem?.reviewedText === MOCK_FLAG_TEXT,
+      );
+    }
+
     // ---- A (continued): controlled provider failure -----------------------------
     section("A. Controlled provider failure (engine returns 500)");
     const failPath = await ta.createTask("Guardrail PROVIDER-FAIL task");
@@ -545,6 +649,10 @@ async function main() {
     check("controlled failure flag shown", /failed|unavailable/i.test(page));
     check("failure output still draft-gated", page.includes(DRAFT_WARNING));
     check("failure prompts retake or specialist transcription", page.includes(MANUAL_TRANSCRIPTION_WARNING));
+    const specialistReplacement = "Specialist transcription entered directly from the source Braille.";
+    r = await qtvi.invoke(failPath, ids.saveTranscription, [failId, specialistReplacement]);
+    page = await (await qtvi.get(failPath)).text();
+    check("poor OCR draft can still be replaced with specialist transcription", page.includes(specialistReplacement), `status=${r.status}`);
 
     exitCode = failures.length ? 1 : 0;
   } catch (error) {

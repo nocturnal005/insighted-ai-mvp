@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test \"tests/**/*.test.ts\"",
     "validate": "npm run validate:mvp && npm run validate:ai && npm run validate:demo && npm run validate:stage1 && npm run validate:stage2 && npm run validate:external-ocr && npm run validate:abc-braille && npm run validate:hybrid-braille",
     "validate:mvp": "node scripts/validate-mvp.mjs",
     "validate:ai": "node scripts/validate-ai.mjs",

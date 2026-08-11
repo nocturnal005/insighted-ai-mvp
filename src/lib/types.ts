@@ -145,6 +145,8 @@ export interface Transcription {
   confidenceEvidence?: TranscriptionConfidenceEvidence | null;
   /** Optional for historical submissions created before confidence-aware verification. */
   reviewItems?: TranscriptionReviewItem[] | null;
+  /** High-priority reasons that could not be attached to an unambiguous text range. */
+  additionalReviewIssues?: string[] | null;
   lowConfidenceRegions: LowConfidenceRegion[];
   engine: string;
   specialistVerifiedBy: string | null;
@@ -351,7 +353,9 @@ export interface EvalSample {
   // Which engine produced the last prediction (optional for seed compatibility).
   provider?: string | null;
   model?: string | null;
+  /** Provider-supplied document score only; engine agreement never belongs here. */
   confidence?: number | null;
+  confidenceEvidenceKind?: TranscriptionConfidenceEvidence["kind"] | null;
   reviewDiscrepancyCount?: number | null;
   primaryLiblouisAgreement?: number | null;
   aiMode?: "mock" | "real" | null;

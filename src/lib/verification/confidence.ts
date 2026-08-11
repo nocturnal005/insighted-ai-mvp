@@ -64,7 +64,9 @@ function itemFromFlag(
   if (!range) return null;
   const evidenceSource = result.meta.provider === "external_braille_ocr"
     ? "ocr_provider_flag"
-    : "general_vision_flag";
+    : isStructuredSecondaryFlag(result, flag)
+      ? "secondary_ai_review"
+      : "general_vision_flag";
   return {
     id: `review-${range.start}-${range.end}-${index}`,
     ...range,
@@ -85,16 +87,61 @@ function itemFromFlag(
   };
 }
 
+function isStructuredSecondaryFlag(result: BrailleOcrResult, flag: UncertaintyFlag): boolean {
+  if (result.meta.provider !== "abc_openai_review") return false;
+  return (result.review?.discrepancies ?? []).some((discrepancy) => {
+    const sourceText = discrepancy.sourceText.trim();
+    return Boolean(
+      sourceText &&
+      flag.text.includes(sourceText) &&
+      flag.reason.includes(discrepancy.reason),
+    );
+  });
+}
+
+interface ReviewCandidate {
+  item: TranscriptionReviewItem;
+  sourcePriority: number;
+  severityPriority: number;
+  originalIndex: number;
+}
+
+const SOURCE_PRIORITY: Record<TranscriptionReviewItem["evidenceSource"], number> = {
+  secondary_ai_review: 0,
+  ocr_provider_flag: 2,
+  general_vision_flag: 3,
+};
+
+const SEVERITY_PRIORITY: Record<TranscriptionReviewItem["severity"], number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
 /** Build only items whose evidence maps unambiguously to an exact visible excerpt. */
 export function buildTranscriptionReviewItems(result: BrailleOcrResult): TranscriptionReviewItem[] {
-  const candidates: TranscriptionReviewItem[] = result.flags
-    .map((flag, index) => itemFromFlag(result, flag, index))
-    .filter((item): item is TranscriptionReviewItem => Boolean(item));
+  const candidates: ReviewCandidate[] = result.flags
+    .map((flag, index) => {
+      const item = itemFromFlag(result, flag, index);
+      return item
+        ? {
+            item,
+            // A derived hybrid flag retains secondary provenance but ranks after the
+            // richer structured discrepancy that carries issue type and alternative.
+            sourcePriority: item.evidenceSource === "secondary_ai_review"
+              ? 1
+              : SOURCE_PRIORITY[item.evidenceSource],
+            severityPriority: SEVERITY_PRIORITY[item.severity],
+            originalIndex: index,
+          }
+        : null;
+    })
+    .filter((candidate): candidate is ReviewCandidate => Boolean(candidate));
 
   for (const [index, discrepancy] of (result.review?.discrepancies ?? []).entries()) {
     const range = lineRange(result.draftText, discrepancy.lineNumber, discrepancy.sourceText);
     if (!range) continue;
-    candidates.push({
+    const item: TranscriptionReviewItem = {
       id: `review-${range.start}-${range.end}-secondary-${index}`,
       ...range,
       machineText: result.draftText.slice(range.start, range.end),
@@ -112,18 +159,88 @@ export function buildTranscriptionReviewItems(result: BrailleOcrResult): Transcr
       reviewerNote: "",
       reviewedBy: null,
       reviewedAt: null,
+    };
+    candidates.push({
+      item,
+      sourcePriority: SOURCE_PRIORITY.secondary_ai_review,
+      severityPriority: SEVERITY_PRIORITY[item.severity],
+      originalIndex: result.flags.length + index,
     });
   }
 
   const occupied: Array<{ start: number; end: number }> = [];
   return candidates
-    .sort((a, b) => a.start - b.start || (a.severity === "high" ? -1 : 1))
-    .filter((item) => {
+    .sort(
+      (a, b) =>
+        a.item.start - b.item.start ||
+        a.sourcePriority - b.sourcePriority ||
+        a.severityPriority - b.severityPriority ||
+        a.originalIndex - b.originalIndex,
+    )
+    .filter((candidate) => {
+      const item = candidate.item;
       if (occupied.some((range) => item.start < range.end && item.end > range.start)) return false;
       occupied.push({ start: item.start, end: item.end });
       return true;
     })
-    .map((item, index) => ({ ...item, id: `review-${item.start}-${item.end}-${index}` }));
+    .map(({ item }, index) => ({ ...item, id: `review-${item.start}-${item.end}-${index}` }));
+}
+
+/** Preserve substantive high-priority reasons that cannot be attached to a safe range. */
+export function buildUnmappedHighPriorityIssues(result: BrailleOcrResult): string[] {
+  const reasons: string[] = [];
+  for (const flag of result.flags) {
+    if (
+      flag.severity !== "high" ||
+      NON_CONTEXTUAL_CATEGORIES.has(flag.category) ||
+      isStructuredSecondaryFlag(result, flag) ||
+      exactUniqueRange(result.draftText, flag.text)
+    ) {
+      continue;
+    }
+    reasons.push(flag.reason.trim());
+  }
+  for (const discrepancy of result.review?.discrepancies ?? []) {
+    if (
+      discrepancy.severity === "high" &&
+      !lineRange(result.draftText, discrepancy.lineNumber, discrepancy.sourceText)
+    ) {
+      reasons.push(discrepancy.reason.trim());
+    }
+  }
+  return [...new Set(reasons.filter(Boolean))];
+}
+
+/**
+ * Re-anchor marked passages after an authorised whole-document edit. Marked text must
+ * remain byte-for-byte intact, unique, and in its original logical order.
+ */
+export function remapReviewItemsAfterWholeDocumentEdit(
+  currentText: string,
+  submittedText: string,
+  items: TranscriptionReviewItem[],
+): TranscriptionReviewItem[] {
+  const ordered = [...items].sort((a, b) => a.start - b.start || a.end - b.end);
+  const positions = new Map<string, { start: number; end: number }>();
+  let priorEnd = -1;
+
+  for (const item of ordered) {
+    if (!item.reviewedText || currentText.slice(item.start, item.end) !== item.reviewedText) {
+      throw new Error("A marked passage is no longer attached to the current transcription. Reload before editing.");
+    }
+    const start = submittedText.indexOf(item.reviewedText);
+    const repeated = start >= 0 && submittedText.indexOf(item.reviewedText, start + item.reviewedText.length) >= 0;
+    const end = start + item.reviewedText.length;
+    if (start < 0 || repeated || start < priorEnd) {
+      throw new Error(
+        "A marked passage was changed, duplicated, or reordered. Use that passage's contextual review control instead.",
+      );
+    }
+    positions.set(item.id, { start, end });
+    priorEnd = end;
+  }
+
+  return items.map((item) => ({ ...item, ...positions.get(item.id)! }));
 }
 
 export function unresolvedRequiredReviewItems(items: TranscriptionReviewItem[] | null | undefined) {

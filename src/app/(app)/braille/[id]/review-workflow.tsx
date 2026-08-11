@@ -62,6 +62,7 @@ export function ReviewWorkflow({
   const confidenceEvidence = t?.confidenceEvidence ?? null;
   const hybridReview = t?.review;
   const reviewItems = t?.reviewItems ?? [];
+  const additionalReviewIssues = t?.additionalReviewIssues ?? [];
   const mockDraft = t?.aiMode === "mock";
   const fb = task.feedback;
   const fbApproved = fb?.status === "approved";
@@ -126,6 +127,13 @@ export function ReviewWorkflow({
         reviewedPassage,
         reviewerNote,
       );
+      setText(null);
+    });
+  }
+
+  function saveWholeTranscription() {
+    run("save", async () => {
+      await saveTranscription(task.id, transcriptValue);
       setText(null);
     });
   }
@@ -250,6 +258,42 @@ export function ReviewWorkflow({
                     </p>
                   )}
                 </div>
+                {!verified && reviewItems.length > 0 && permissions.canEdit && (
+                  <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 py-3">
+                    <summary className="cursor-pointer text-sm font-medium text-zinc-700">Edit full transcription</summary>
+                    <div className="mt-3 space-y-3">
+                      <p className="text-xs leading-relaxed text-zinc-500">
+                        Use this fallback to correct unflagged text. Marked passages must remain unchanged and should be edited through their contextual review controls.
+                      </p>
+                      <textarea
+                        id="full-transcript"
+                        aria-label="Full transcription editor"
+                        value={transcriptValue}
+                        onChange={(event) => setText(event.target.value)}
+                        rows={12}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-4 text-base leading-7 text-zinc-900 focus:border-accent-500"
+                      />
+                      <button type="button" onClick={saveWholeTranscription} disabled={pending} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">
+                        {action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save full transcription edits
+                      </button>
+                    </div>
+                  </details>
+                )}
+                {!verified && permissions.canVerify && additionalReviewIssues.length > 0 && (
+                  <details className="rounded-xl border border-critical-200 bg-critical-50/60 px-4 py-3">
+                    <summary className="cursor-pointer text-sm font-medium text-critical-700">
+                      Additional review issues ({additionalReviewIssues.length})
+                    </summary>
+                    <div className="mt-3">
+                      <p className="text-xs leading-relaxed text-critical-700">
+                        These high-priority OCR issues could not be mapped to one unambiguous passage. No text range has been guessed; inspect the full source during specialist verification.
+                      </p>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-relaxed text-critical-700">
+                        {additionalReviewIssues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}
+                      </ul>
+                    </div>
+                  </details>
+                )}
                 {!verified && (
                   <div>
                     <label htmlFor="specialistNotes" className="mb-1.5 block text-sm font-medium text-zinc-700">Specialist transcription notes</label>
@@ -362,7 +406,7 @@ export function ReviewWorkflow({
                     </button>
                   )}
                   {permissions.canEdit && reviewItems.length === 0 && (
-                    <button onClick={() => run("save", () => saveTranscription(task.id, transcriptValue))} disabled={pending} className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{needsSpecialistTranscription ? "Save specialist transcription" : "Save edits"}</button>
+                    <button onClick={saveWholeTranscription} disabled={pending} className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{needsSpecialistTranscription ? "Save specialist transcription" : "Save edits"}</button>
                   )}
                   {permissions.canVerify ? (
                     <button onClick={() => run("verify", () => verifyTranscription(task.id, transcriptValue, specialistNotes))} disabled={pending || mockDraft || transcriptValue.trim().length === 0 || unresolvedRequiredCount > 0} title={mockDraft ? "Run live transcription before specialist verification" : unresolvedRequiredCount > 0 ? "Resolve every required-review passage before final verification" : undefined} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
@@ -560,6 +604,10 @@ function SelectedReviewContext({
     : item.evidenceSource === "secondary_ai_review"
       ? "Secondary AI discrepancy review"
       : "General vision model uncertainty flag";
+  const confirmBlocked =
+    pending ||
+    reviewedPassage !== item.reviewedText ||
+    item.reviewedText !== item.machineText;
 
   return (
     <section aria-labelledby="selected-review-heading" className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3.5">
@@ -579,6 +627,16 @@ function SelectedReviewContext({
       <div>
         <label htmlFor="reviewed-passage" className="text-xs font-medium text-zinc-600">Current / verified output</label>
         <textarea id="reviewed-passage" value={reviewedPassage} onChange={(event) => onPassageChange(event.target.value)} readOnly={!canReview} rows={3} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 read-only:bg-zinc-100" />
+        {canReview && reviewedPassage !== item.reviewedText && (
+          <p role="status" className="mt-1 text-xs leading-relaxed text-caution-700">
+            This passage has an unsaved edit. Save the correction or restore the stored text before confirming.
+          </p>
+        )}
+        {canReview && reviewedPassage === item.reviewedText && item.reviewedText !== item.machineText && (
+          <p role="status" className="mt-1 text-xs leading-relaxed text-zinc-500">
+            This passage is a correction and remains labelled corrected. Restore and save the original machine text before confirming the machine interpretation.
+          </p>
+        )}
       </div>
       {canReview && (
         <>
@@ -587,7 +645,7 @@ function SelectedReviewContext({
             <textarea id="reviewer-note" value={reviewerNote} onChange={(event) => onNoteChange(event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800" />
           </div>
           <div className="grid gap-2">
-            <button type="button" onClick={() => onReview("confirmed")} disabled={pending} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-3 text-xs font-medium text-white disabled:opacity-50">{action === "review-confirmed" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Confirm interpretation</button>
+            <button type="button" onClick={() => onReview("confirmed")} disabled={confirmBlocked} title={reviewedPassage !== item.reviewedText ? "Save or discard the pending passage edit before confirming" : item.reviewedText !== item.machineText ? "Restore and save the original machine text before confirming" : undefined} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-3 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{action === "review-confirmed" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Confirm machine interpretation</button>
             <button type="button" onClick={() => onReview("corrected")} disabled={pending || !reviewedPassage.trim()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 disabled:opacity-50">{action === "review-corrected" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}Save corrected translation</button>
             <button type="button" onClick={() => onReview("needs_rescan")} disabled={pending} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-critical-200 bg-white px-3 text-xs font-medium text-critical-700 disabled:opacity-50">{action === "review-needs_rescan" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Needs re-scan</button>
           </div>

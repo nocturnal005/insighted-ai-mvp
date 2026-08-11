@@ -16,6 +16,8 @@ const NEXT_DIST_DIR = `.next-stage2-browser-${process.pid}`;
 const NEXT_TSCONFIG = `.tsconfig-stage2-browser-${process.pid}.json`;
 const FLAG_TEXT = "uncertain phrase browser-2f7a";
 const DRAFT = `Ordinary translated content stays quiet. ${FLAG_TEXT}. The final sentence is ordinary.`;
+const UNMAPPABLE_TEXT = "repeated browser issue-7d2c";
+const UNMAPPABLE_REASON = "Repeated high-priority browser issue remains visible without a guessed highlight.";
 
 writeFileSync(
   path.join(ROOT, NEXT_TSCONFIG),
@@ -26,19 +28,25 @@ const engine = http.createServer((request, response) => {
   let body = "";
   request.on("data", (chunk) => (body += chunk));
   request.on("end", () => {
-    JSON.parse(body || "{}");
+    const parsed = JSON.parse(body || "{}");
+    const unmappable = String(parsed.title ?? "").includes("UNMAPPABLE-HIGH");
+    const draftText = unmappable ? `${UNMAPPABLE_TEXT} middle ${UNMAPPABLE_TEXT}` : DRAFT;
+    const flagText = unmappable ? UNMAPPABLE_TEXT : FLAG_TEXT;
+    const reason = unmappable
+      ? UNMAPPABLE_REASON
+      : "The OCR provider marked this exact phrase for specialist attention.";
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({
-      draftText: DRAFT,
+      draftText,
       confidence: 0.72,
       providerRequestId: "stage2_browser_fixture",
       flags: [{
-        text: FLAG_TEXT,
-        reason: "The OCR provider marked this exact phrase for specialist attention.",
+        text: flagText,
+        reason,
         category: "low_ocr_confidence",
         severity: "high",
       }],
-      pageResults: [{ pageNumber: 1, text: DRAFT, confidence: 0.72, flags: [] }],
+      pageResults: [{ pageNumber: 1, text: draftText, confidence: 0.72, flags: [] }],
     }));
   });
 });

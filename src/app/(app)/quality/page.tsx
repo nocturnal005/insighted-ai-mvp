@@ -69,7 +69,11 @@ export default async function QualityPage() {
           <CardBody className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Metric label="Average CER" value={pct(stats.evalAvgCer)} />
             <Metric label="Average WER" value={pct(stats.evalAvgWer)} />
-            <Metric label="Average confidence" value={stats.evalAvgConfidence == null ? "—" : `${Math.round(stats.evalAvgConfidence * 100)}%`} />
+            <Metric
+              label="Average provider document score"
+              value={stats.evalAvgProviderConfidence == null ? "—" : `${Math.round(stats.evalAvgProviderConfidence * 100)}%`}
+              hint="Provider-supplied evidence; not a Braivanta-calibrated accuracy guarantee."
+            />
             <Metric label="By Braille type" value={stats.byBrailleType.map((b) => `${b.key}: ${b.count}`).join(", ") || "—"} />
             <Metric label="Common flags" value={stats.topFlagCategories.map((f) => `${f.key} (${f.count})`).join(", ") || "—"} />
           </CardBody>
@@ -139,7 +143,12 @@ export default async function QualityPage() {
                               ? ` · ${s.aiMode ?? "?"} · live transcription`
                               : ` · ${s.aiMode ?? "?"} · ${s.provider}/${s.model ?? "?"}`
                             : ""}
-                          {s.confidence != null ? ` · ${Math.round(s.confidence * 100)}% conf` : ""}
+                          {s.confidenceEvidenceKind === "provider_score" && s.confidence != null
+                            ? ` · ${Math.round(s.confidence * 100)}% provider document score`
+                            : ""}
+                          {s.primaryLiblouisAgreement != null
+                            ? ` · Engine agreement ${Math.round(s.primaryLiblouisAgreement * 100)}%`
+                            : ""}
                         </p>
                       )}
                     </td>
@@ -229,11 +238,12 @@ function Tag({ children, tone }: { children: React.ReactNode; tone?: "critical" 
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
       <p className="eyebrow font-semibold">{label}</p>
       <p className="mt-1 text-sm text-zinc-800">{value}</p>
+      {hint && <p className="mt-0.5 text-xs leading-relaxed text-zinc-400">{hint}</p>}
     </div>
   );
 }
