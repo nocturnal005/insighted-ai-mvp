@@ -204,7 +204,7 @@ class Session {
   }
 }
 
-function brailleActionIds() {
+function readBrailleActionIds() {
   for (const manifestPath of [
     path.join(ROOT, NEXT_DIST_DIR, "dev", "server", "server-reference-manifest.json"),
     path.join(ROOT, NEXT_DIST_DIR, "server", "server-reference-manifest.json"),
@@ -213,11 +213,21 @@ function brailleActionIds() {
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     const ids = {};
     for (const [actionId, entry] of Object.entries(manifest.node ?? {})) {
-      if (String(entry.filename).replaceAll("\\", "/").endsWith("src/app/(app)/braille/actions.ts")) {
+      if (String(entry.filename).replaceAll("\\", "/").endsWith("app/(app)/braille/actions.ts")) {
         ids[entry.exportedName] = actionId;
       }
     }
     if (ids.runTranscription) return ids;
+  }
+  return null;
+}
+
+async function brailleActionIds(timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ids = readBrailleActionIds();
+    if (ids) return ids;
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error("braille action ids not found");
 }
@@ -234,7 +244,8 @@ async function main() {
     const taskId = taskPath.split("/").pop();
     // Compile the dynamic detail route before reading its per-route action manifest.
     await (await session.get(taskPath)).text();
-    const response = await session.invoke(taskPath, brailleActionIds().runTranscription, [taskId]);
+    const ids = await brailleActionIds();
+    const response = await session.invoke(taskPath, ids.runTranscription, [taskId]);
     check("Run transcription completes", response.status === 200, `status=${response.status}`);
 
     const stored = JSON.parse(readFileSync(path.join(DATA_DIR, "db.json"), "utf8"));
