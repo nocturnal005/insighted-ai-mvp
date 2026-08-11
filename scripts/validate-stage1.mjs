@@ -90,7 +90,12 @@ contains("src/app/(app)/braille/new/page.tsx", [
 ]);
 
 contains("src/app/globals.css", [":focus-visible", "prefers-reduced-motion"]);
-contains("src/app/layout.tsx", ["title: \"Braivanta\"", "applicationName: \"Braivanta\""]);
+contains("src/app/layout.tsx", [
+  "title: \"Braivanta\"",
+  "applicationName: \"Braivanta\"",
+  "process.env.VERCEL_URL",
+  "`https://${vercelUrl}`",
+]);
 
 const dashboard = source("src/app/(app)/dashboard/page.tsx");
 check("dashboard no longer renders KPI stat cards", !dashboard.includes("function Stat(") && !dashboard.includes('label="Active tasks"'));
