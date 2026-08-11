@@ -3,17 +3,31 @@ import "./globals.css";
 
 const description = "Secure, human-verified accessibility workflow for visually impaired education teams.";
 const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+const vercelUrl = process.env.VERCEL_URL?.trim();
 
 function configuredMetadataBase(): URL {
-  try {
-    return new URL(configuredSiteUrl || "http://localhost:3000");
-  } catch {
-    return new URL("http://localhost:3000");
+  if (configuredSiteUrl) {
+    try {
+      return new URL(configuredSiteUrl);
+    } catch {
+      // Continue to the deployment URL when the configured public URL is invalid.
+    }
   }
+
+  if (vercelUrl) {
+    try {
+      return new URL(`https://${vercelUrl}`);
+    } catch {
+      // Continue to the local development default when the deployment URL is invalid.
+    }
+  }
+
+  return new URL("http://localhost:3000");
 }
 
 export const metadata: Metadata = {
   metadataBase: configuredMetadataBase(),
+  applicationName: "Braivanta",
   title: "Braivanta",
   description,
   openGraph: {

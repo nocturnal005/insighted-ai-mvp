@@ -5,6 +5,7 @@ import { pupilLabel } from "@/lib/store";
 import { Card } from "@/components/ui/card";
 import { TaskBadge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
+import { SubmissionWorkflow } from "@/components/submission-workflow";
 import { formatRelative } from "@/lib/utils";
 import { hydrateBrailleTasks } from "@/lib/durable-braille";
 
@@ -15,22 +16,24 @@ export default async function BrailleListPage() {
   return (
     <>
       <PageHeader
-        title="Braille Work Review"
-        description="Upload pupil Braille work, verify the transcription, and generate feedback."
+        title="Braille submissions"
+        description="Move learner work from upload and translation through verification to approved feedback."
         action={
           <Link
             href="/braille/new"
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-zinc-900 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
           >
-            <Plus className="h-4 w-4" /> New review
+            <Plus className="h-4 w-4" /> Start upload
           </Link>
         }
       />
 
+      <SubmissionWorkflow className="mb-6" />
+
       {tasks.length === 0 ? (
         <Card className="px-5 py-16 text-center">
           <ScanText className="mx-auto h-8 w-8 text-zinc-300" />
-          <p className="mt-3 text-sm text-zinc-500">No Braille reviews yet.</p>
+          <p className="mt-3 text-sm text-zinc-500">No Braille submissions yet.</p>
         </Card>
       ) : (
         <Card className="overflow-hidden">

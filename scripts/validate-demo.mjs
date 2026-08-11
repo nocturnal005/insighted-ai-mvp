@@ -77,7 +77,7 @@ const checks = [
   },
   {
     file: ".github/workflows/ci.yml",
-    mustContain: ["npm run typecheck", "npm run build", "npm run validate:demo", "node-version: 20"],
+    mustContain: ["npm run typecheck", "npm run build", "npm run validate", "node-version: 20"],
   },
   {
     file: "package.json",

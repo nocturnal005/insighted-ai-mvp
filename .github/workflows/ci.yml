@@ -17,6 +17,4 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
-      - run: npm run validate:mvp
-      - run: npm run validate:ai
-      - run: npm run validate:demo
+      - run: npm run validate
