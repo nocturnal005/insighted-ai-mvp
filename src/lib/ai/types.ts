@@ -113,8 +113,22 @@ export interface BrailleOcrInput {
 export interface BraillePageResult {
   pageNumber: number;
   text: string;
-  confidence: number;
+  confidence: number | null;
   flags: UncertaintyFlag[];
+}
+
+/**
+ * Explicit semantics for the one confidence-like value attached to a Braille run.
+ * `engine_agreement` is deterministic comparison evidence, not an OCR accuracy claim.
+ */
+export interface BrailleConfidenceEvidence {
+  availability: "available" | "unavailable";
+  value: number | null;
+  kind: "provider_score" | "engine_agreement" | "unavailable";
+  granularity: "document";
+  source: string;
+  meaning: string;
+  providerSupplied: boolean;
 }
 
 export type BrailleReviewStatus = "completed" | "skipped" | "unavailable" | "failed";
@@ -161,6 +175,7 @@ export interface BrailleOcrResult {
   confidence: number;
   /** Distinguishes provider scores from evidence-derived consensus and absent scores. */
   confidenceBasis?: "provider" | "consensus" | "not_supplied";
+  confidenceEvidence?: BrailleConfidenceEvidence;
   flags: UncertaintyFlag[];
   rawBraille?: string | null;
   rawCells?: unknown;

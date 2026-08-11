@@ -10,7 +10,12 @@ import { hydrateBrailleTask, persistBrailleTask } from "@/lib/durable-braille";
 import { transcribeBraille, mapFlagsToLowConfidenceRegions, summariseFlags, toStoredFlags } from "@/lib/ai";
 import { assertVisionImageUpload } from "@/lib/upload-guard";
 import { generateFeedback } from "@/lib/feedback";
-import type { BrailleTask } from "@/lib/types";
+import type { BrailleTask, TranscriptionReviewStatus } from "@/lib/types";
+import {
+  buildTranscriptionReviewItems,
+  storedConfidenceEvidence,
+  unresolvedRequiredReviewItems,
+} from "@/lib/verification/confidence";
 
 export async function createBrailleTask(formData: FormData) {
   const user = await requireUser();
@@ -100,6 +105,7 @@ async function executeTranscription(
   });
 
   const regions = mapFlagsToLowConfidenceRegions(result.flags);
+  const confidenceEvidence = storedConfidenceEvidence(result);
   task.transcription = {
     draftText: result.draftText,
     editedText: result.draftText,
@@ -107,6 +113,8 @@ async function executeTranscription(
     status: "needs_specialist_review",
     confidence: result.confidence,
     confidenceBasis: result.confidenceBasis,
+    confidenceEvidence,
+    reviewItems: buildTranscriptionReviewItems(result),
     lowConfidenceRegions: regions,
     engine: result.meta.model,
     specialistVerifiedBy: null,
@@ -154,7 +162,8 @@ async function executeTranscription(
     newStatus: task.status,
     provider: result.meta.provider,
     model: result.meta.model,
-    confidence: result.confidenceBasis === "not_supplied" ? null : result.confidence,
+    confidence:
+      confidenceEvidence.kind === "provider_score" ? confidenceEvidence.value : null,
     processingMs: result.meta.processingMs,
     aiMode: result.meta.mode,
     promptVersion: result.meta.promptVersion,
@@ -199,6 +208,9 @@ export async function saveTranscription(taskId: string, editedText: string) {
   const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription) throw new Error("Nothing to edit");
   if (task.transcription.status === "specialist_verified") throw new Error("Already verified and locked");
+  if ((task.transcription.reviewItems ?? []).length > 0) {
+    throw new Error("Use the contextual passage review controls so uncertainty evidence remains attached to the correct text");
+  }
 
   task.transcription.editedText = editedText;
   task.updatedAt = new Date().toISOString();
@@ -215,6 +227,79 @@ export async function saveTranscription(taskId: string, editedText: string) {
   revalidatePath(`/braille/${taskId}`);
 }
 
+export async function reviewTranscriptionItem(
+  taskId: string,
+  itemId: string,
+  nextStatus: Exclude<TranscriptionReviewStatus, "unreviewed">,
+  reviewedText: string,
+  reviewerNote = "",
+) {
+  const user = await requireUser();
+  if (!can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate })) {
+    throw new Error("Only authorised Braille specialists can review flagged passages");
+  }
+  if (!(["confirmed", "corrected", "needs_rescan"] as const).includes(nextStatus)) {
+    throw new Error("Invalid review state");
+  }
+
+  const task = await hydrateBrailleTask(taskId);
+  const transcription = task?.transcription;
+  if (!task || !transcription) throw new Error("Nothing to review");
+  if (transcription.status === "specialist_verified") throw new Error("Already verified and locked");
+  const items = transcription.reviewItems ?? [];
+  const item = items.find((candidate) => candidate.id === itemId);
+  if (!item) throw new Error("Review item not found");
+
+  const currentSlice = transcription.editedText.slice(item.start, item.end);
+  if (currentSlice !== item.reviewedText) {
+    throw new Error("This passage changed after it was selected. Reload and review the latest text.");
+  }
+
+  const replacement = nextStatus === "corrected" ? reviewedText : item.reviewedText;
+  if (nextStatus === "corrected" && !replacement.trim()) {
+    throw new Error("Corrected translation text is required");
+  }
+
+  if (nextStatus === "corrected") {
+    transcription.editedText =
+      transcription.editedText.slice(0, item.start) +
+      replacement +
+      transcription.editedText.slice(item.end);
+    const delta = replacement.length - item.reviewedText.length;
+    const oldEnd = item.end;
+    item.reviewedText = replacement;
+    item.end = item.start + replacement.length;
+    for (const candidate of items) {
+      if (candidate.id !== item.id && candidate.start >= oldEnd) {
+        candidate.start += delta;
+        candidate.end += delta;
+      }
+    }
+  }
+
+  const previousStatus = item.reviewStatus;
+  item.reviewStatus = nextStatus;
+  item.reviewerNote = reviewerNote.trim();
+  item.reviewedBy = user.id;
+  item.reviewedAt = new Date().toISOString();
+  task.updatedAt = item.reviewedAt;
+
+  recordAudit({
+    actorId: user.id,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: `transcription.review_item.${nextStatus}`,
+    objectType: "Braille review passage",
+    objectLabel: task.title,
+    taskId: task.id,
+    previousStatus,
+    newStatus: nextStatus,
+    reason: item.reviewerNote || null,
+  });
+  await persistBrailleTask(task);
+  revalidatePath(`/braille/${taskId}`);
+}
+
 export async function verifyTranscription(taskId: string, finalText: string, specialistNotes = "") {
   const user = await requireUser();
   if (!can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate })) {
@@ -225,6 +310,15 @@ export async function verifyTranscription(taskId: string, finalText: string, spe
   if (!finalText.trim()) throw new Error("A specialist-reviewed transcription is required");
   if (task.transcription.aiMode === "mock") {
     throw new Error("Demo placeholder text cannot be specialist-verified. Run live transcription or enter a supported source workflow.");
+  }
+  const unresolved = unresolvedRequiredReviewItems(task.transcription.reviewItems);
+  if (unresolved.length > 0) {
+    throw new Error(
+      `${unresolved.length} required-review passage${unresolved.length === 1 ? " is" : "s are"} unresolved`,
+    );
+  }
+  if ((task.transcription.reviewItems ?? []).length > 0 && finalText !== task.transcription.editedText) {
+    throw new Error("Save flagged-passage decisions before final specialist verification");
   }
 
   const previousStatus = task.status;

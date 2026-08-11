@@ -59,7 +59,7 @@ const contracts = [
   {
     name: "review UI labels evidence and never auto-applies suggestions",
     file: "src/app/(app)/braille/[id]/review-workflow.tsx",
-    includes: ["Hybrid review evidence", "never applied automatically", "Primary / back-translation agreement"],
+    includes: ["Hybrid review evidence", "never applied automatically", "Engine agreement"],
   },
   {
     name: "private implementation provenance stays server-side",

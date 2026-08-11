@@ -10,6 +10,9 @@ const nextConfig = {
   },
   reactStrictMode: true,
   poweredByHeader: false,
+  // Validation/browser harnesses bind to loopback by address; permit that development
+  // origin so Next's client runtime hydrates rather than leaving a read-only HTML shell.
+  allowedDevOrigins: ["127.0.0.1"],
   images: {
     // The landing hero is stable and is already served through next/image; a longer
     // variant cache avoids repeated image work on slower devices and repeat visits.

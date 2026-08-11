@@ -45,10 +45,14 @@ const BASE = `http://127.0.0.1:${APP_PORT}`;
 const MOCK_ENDPOINT = `http://127.0.0.1:${MOCK_PORT}/ocr`;
 const CONTRACT_KEY = "test-contract-key"; // local throwaway value, never a real secret
 
-const MOCK_DRAFT = "mock draft transcription line 9f3e";
+const MOCK_FLAG_TEXT = "uncertain phrase 9f3e";
+const MOCK_DRAFT = `stable words ${MOCK_FLAG_TEXT} ending`;
 const MOCK_FLAG_REASON = "MOCK-FLAG-REASON-7b21 synthetic uncertainty for guardrail";
+const REVIEW_ITEM_ID = `review-${MOCK_DRAFT.indexOf(MOCK_FLAG_TEXT)}-${MOCK_DRAFT.indexOf(MOCK_FLAG_TEXT) + MOCK_FLAG_TEXT.length}-0`;
+const CORRECTED_FLAG_TEXT = "verified phrase 9f3e";
 const RAW_BODY_MARKER = "RAW-PROVIDER-BODY-MARKER-9c4e";
-const VERIFIED_FINAL = `${MOCK_DRAFT} corrected by specialist`;
+const VERIFIED_FLAG_TEXT = "checked phrase 9f3e";
+const VERIFIED_FINAL = MOCK_DRAFT.replace(MOCK_FLAG_TEXT, VERIFIED_FLAG_TEXT);
 const TEACHER_COMMENTS = "Guardrail teacher feedback comments 51ad.";
 
 const DRAFT_WARNING =
@@ -102,7 +106,7 @@ function startMockEngine() {
           rawBraille: "⠍⠕⠉⠅",
           rawCells: [{ line: 1, cellIndex: 1, dots: [1, 3, 4], bbox: [10, 10, 30, 40], confidence: 0.9 }],
           providerRequestId: "mock_req_guardrail_001",
-          flags: [{ text: "", reason: MOCK_FLAG_REASON, category: "low_ocr_confidence", severity: "low" }],
+          flags: [{ text: MOCK_FLAG_TEXT, reason: MOCK_FLAG_REASON, category: "low_ocr_confidence", severity: "high" }],
           pageResults: [{ pageNumber: 1, text: MOCK_DRAFT, confidence: 0.9, flags: [] }],
           // Extra field a real engine might send. It must never be stored or surfaced:
           secretRawMarker: RAW_BODY_MARKER,
@@ -298,6 +302,11 @@ async function main() {
     const qtvi = await new Session().login("u_priya");
     const senco = await new Session().login("u_helen");
 
+    const historical = await (await qtvi.get("/braille/bt_1002")).text();
+    check("historical submission without Stage 2 metadata still renders", historical.includes("Confidence unavailable"));
+    check("historical submission keeps the existing editable transcription", historical.includes('id="transcript"'));
+    check("historical submission has no broken contextual review panel", !historical.includes("Select a marked passage"));
+
     // ---- A. Adapter contract -------------------------------------------------
     section("A. external_braille_ocr adapter contract");
     const taskPath = await ta.createTask("Guardrail contract validation task");
@@ -333,6 +342,13 @@ async function main() {
     check("result is draft-only (warning shown)", page.includes(DRAFT_WARNING));
     check("status: Needs specialist review", page.includes("Needs specialist review"));
     check("engine uncertainty flag preserved", page.includes("MOCK-FLAG-REASON-7b21"));
+    check("review-required passage is identified without colour alone", page.includes(`aria-label="Review required: ${MOCK_FLAG_TEXT}"`));
+    check("ordinary content is not marked as uncertain", !page.includes('aria-label="Review required: stable words"'));
+    check(
+      "provider document confidence is labelled by source and granularity",
+      page.includes("Provider document confidence") && page.includes("100") && page.includes("Whole-document score supplied"),
+    );
+    check("passage confidence remains honestly unavailable", page.includes("Passage confidence") || page.includes("Select a marked passage"));
     check("raw provider body not stored (task page)", !page.includes(RAW_BODY_MARKER));
 
     const auditHtml = await (await senco.get("/audit")).text();
@@ -349,7 +365,40 @@ async function main() {
     // ---- C. Human workflow gates ----------------------------------------------
     section("C. Human-verification workflow gates");
 
-    let r = await teacher.invoke(taskPath, ids.createFeedback, [taskId]);
+    let r = await teacher.invoke(taskPath, ids.reviewTranscriptionItem, [
+      taskId,
+      REVIEW_ITEM_ID,
+      "corrected",
+      "teacher bypass",
+      "",
+    ]);
+    page = await (await teacher.get(taskPath)).text();
+    check("unauthorised role cannot perform specialist passage review", !page.includes("teacher bypass"));
+
+    r = await qtvi.invoke(taskPath, ids.verifyTranscription, [taskId, MOCK_DRAFT, "premature verify"]);
+    page = await (await qtvi.get(taskPath)).text();
+    check("unresolved required-review passage blocks final verification", !page.includes("Verified and locked"));
+
+    r = await qtvi.invoke(taskPath, ids.reviewTranscriptionItem, [
+      taskId,
+      REVIEW_ITEM_ID,
+      "confirmed",
+      MOCK_FLAG_TEXT,
+      "Checked against the source.",
+    ]);
+    page = await (await qtvi.get(taskPath)).text();
+    check("authorised specialist can confirm a passage", page.includes("Confirmed"), `status=${r.status}`);
+    check("confirmed passage persists after reload", page.includes(`aria-label="Confirmed: ${MOCK_FLAG_TEXT}"`));
+
+    await qtvi.invoke(taskPath, ids.reviewTranscriptionItem, [
+      taskId,
+      REVIEW_ITEM_ID,
+      "corrected",
+      VERIFIED_FLAG_TEXT,
+      "Final wording checked against the source.",
+    ]);
+
+    r = await teacher.invoke(taskPath, ids.createFeedback, [taskId]);
     page = await (await teacher.get(taskPath)).text();
     check("feedback blocked before specialist verification", !page.includes("AI draft · editable"));
 
@@ -436,6 +485,54 @@ async function main() {
     // CER/WER are computed by scorePair at capture; draft differs from final, so a
     // non-zero CER percentage must render alongside the pair.
     check("CER/WER columns rendered", quality.includes("CER") && quality.includes("WER"));
+
+    // ---- E. Stage 2 correction and re-scan persistence -------------------------
+    section("E. Confidence-aware correction and re-scan persistence");
+    const correctionPath = await ta.createTask("Stage 2 correction validation task");
+    const correctionTaskId = correctionPath.split("/").pop();
+    await (await ta.get(correctionPath)).text();
+    await ta.invoke(correctionPath, ids.runTranscription, [correctionTaskId]);
+
+    r = await qtvi.invoke(correctionPath, ids.reviewTranscriptionItem, [
+      correctionTaskId,
+      REVIEW_ITEM_ID,
+      "needs_rescan",
+      MOCK_FLAG_TEXT,
+      "Source capture needs another scan.",
+    ]);
+    let correctionPage = await (await qtvi.get(correctionPath)).text();
+    check("needs re-scan state persists", correctionPage.includes(`aria-label="Needs re-scan: ${MOCK_FLAG_TEXT}"`), `status=${r.status}`);
+
+    r = await qtvi.invoke(correctionPath, ids.verifyTranscription, [correctionTaskId, MOCK_DRAFT, "should remain blocked"]);
+    correctionPage = await (await qtvi.get(correctionPath)).text();
+    check("needs re-scan state blocks final verification", !correctionPage.includes("Verified and locked"));
+
+    r = await qtvi.invoke(correctionPath, ids.reviewTranscriptionItem, [
+      correctionTaskId,
+      REVIEW_ITEM_ID,
+      "corrected",
+      CORRECTED_FLAG_TEXT,
+      "Corrected from the source Braille.",
+    ]);
+    correctionPage = await (await qtvi.get(correctionPath)).text();
+    check("reviewer correction persists after reload", correctionPage.includes(`aria-label="Corrected: ${CORRECTED_FLAG_TEXT}"`), `status=${r.status}`);
+
+    const storedDb = JSON.parse(readFileSync(path.join(DATA_DIR, "db.json"), "utf8"));
+    const storedCorrectionTask = storedDb.brailleTasks.find((task) => task.id === correctionTaskId);
+    const storedReviewItem = storedCorrectionTask?.transcription?.reviewItems?.[0];
+    check("original machine document remains preserved", storedCorrectionTask?.transcription?.draftText === MOCK_DRAFT);
+    check("corrected document is stored separately", storedCorrectionTask?.transcription?.editedText === MOCK_DRAFT.replace(MOCK_FLAG_TEXT, CORRECTED_FLAG_TEXT));
+    check("original machine passage remains preserved", storedReviewItem?.machineText === MOCK_FLAG_TEXT);
+    check("current corrected passage is stored separately", storedReviewItem?.reviewedText === CORRECTED_FLAG_TEXT);
+    check("bounded corrected status persists", storedReviewItem?.reviewStatus === "corrected");
+
+    r = await qtvi.invoke(correctionPath, ids.verifyTranscription, [
+      correctionTaskId,
+      MOCK_DRAFT.replace(MOCK_FLAG_TEXT, CORRECTED_FLAG_TEXT),
+      "Stage 2 corrected and checked.",
+    ]);
+    correctionPage = await (await qtvi.get(correctionPath)).text();
+    check("resolved required-review item permits final verification", correctionPage.includes("Verified and locked"), `status=${r.status}`);
 
     // ---- A (continued): controlled provider failure -----------------------------
     section("A. Controlled provider failure (engine returns 500)");

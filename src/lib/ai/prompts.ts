@@ -116,13 +116,11 @@ export function buildBrailleDraftPrompt(input: {
     "Return STRICT JSON only, matching exactly this shape:",
     "{",
     '  "draftText": string,',
-    '  "confidence": number (0..1),',
     '  "flags": [ { "text": string, "reason": string, "category": string, "severity": "low|medium|high" } ]',
     "}",
     "For flags.category prefer one of: unclear_braille_cell, possible_contraction_issue,",
     "possible_number_sign_issue, possible_capitalisation_issue, line_order_uncertainty,",
     "word_spacing_uncertainty, subject_specific_term, low_ocr_confidence, low_image_quality.",
-    "Keep confidence conservative (typically <= 0.6) because this is not specialist OCR.",
   ]
     .filter(Boolean)
     .join("\n");

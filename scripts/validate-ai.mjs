@@ -5,7 +5,8 @@
  * asserts each required AI/OCR behaviour by checking that the guaranteeing code path is
  * present in source. Each assertion maps to a behaviour from the hardening spec and fails
  * loudly if a future edit removes the guarantee (e.g. drops the Braille specialist-review
- * flag, the OpenAI confidence cap, or reintroduces a direct mock call in a server action).
+ * flag, the Braille confidence anti-fabrication rule, or reintroduces a direct mock call
+ * in a server action).
  */
 import { existsSync, readFileSync } from "node:fs";
 
@@ -69,9 +70,10 @@ const behaviours = [
     includes: ["MAX_FLAGS", "slice(0, MAX_FLAGS)", "truncateText"],
   },
   {
-    name: "OpenAI Braille draft confidence is capped conservatively (<= 0.6)",
+    name: "general-purpose vision output is not presented as Braille OCR confidence",
     file: "src/lib/ai/providers/openai-vision-provider.ts",
-    includes: ["Math.min(clampConfidence(parsed.confidence ?? 0.4), 0.6)"],
+    includes: ['confidenceBasis: "not_supplied"', 'kind: "unavailable"'],
+    excludes: ["const conservative"],
   },
   {
     name: "OpenAI Braille output always requires specialist review",
@@ -101,7 +103,8 @@ const behaviours = [
   {
     name: "external Braille adapter enforces timeout + response-size cap + confidence clamp",
     file: "src/lib/ai/providers/external-braille-provider.ts",
-    includes: ["timeoutMs", "MAX_RESPONSE_BYTES", "clampConfidence(parsed.confidence ?? 0.5)", "requiresSpecialistReview: true"],
+    includes: ["timeoutMs", "MAX_RESPONSE_BYTES", "providerConfidenceSupplied", "clampConfidence(parsed.confidence)", "requiresSpecialistReview: true"],
+    excludes: ["parsed.confidence ?? 0.5"],
   },
   {
     name: "external Braille adapter passes through providerRequestId only if returned",

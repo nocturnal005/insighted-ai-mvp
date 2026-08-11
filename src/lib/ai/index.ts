@@ -87,6 +87,16 @@ function blockedBrailleResult(): BrailleOcrResult {
   return {
     draftText: "",
     confidence: 0,
+    confidenceBasis: "not_supplied",
+    confidenceEvidence: {
+      availability: "unavailable",
+      value: null,
+      kind: "unavailable",
+      granularity: "document",
+      source: "Processing safety gate",
+      meaning: "No provider ran, so confidence evidence is unavailable.",
+      providerSupplied: false,
+    },
     flags: [realPupilDataBlockedFlag(), requiresSpecialistReviewFlag()],
     rawBraille: null,
     rawCells: null,

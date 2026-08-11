@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import {
   Sparkles, Loader2, CheckCircle2, AlertTriangle, FileText, Lock,
-  XCircle, Archive, Ban, ShieldCheck, RefreshCw,
+  XCircle, Archive, Ban, ShieldCheck, RefreshCw, CircleAlert, Pencil,
 } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { TranscriptionBadge } from "@/components/ui/badge";
@@ -13,10 +13,18 @@ import { ExportGateHint } from "@/components/gate-hint";
 import { SourceImage, type SourceUpload } from "@/components/source-image";
 import { SubmissionWorkflow, type SubmissionStage } from "@/components/submission-workflow";
 import { TaskTimeline } from "@/components/task-timeline";
-import type { AuditEntry, BrailleHybridReview, BrailleTask } from "@/lib/types";
+import type {
+  AuditEntry,
+  BrailleHybridReview,
+  BrailleTask,
+  TranscriptionConfidenceEvidence,
+  TranscriptionReviewItem,
+  TranscriptionReviewStatus,
+} from "@/lib/types";
 import {
   runTranscription, rerunBrailleTranscription, saveTranscription, verifyTranscription,
   createFeedback, saveFeedback, approveFeedback, rejectBrailleTask, archiveBrailleTask,
+  reviewTranscriptionItem,
 } from "../actions";
 
 interface Perms {
@@ -51,9 +59,9 @@ export function ReviewWorkflow({
 }) {
   const t = task.transcription;
   const verified = t?.status === "specialist_verified";
-  const confidenceNotSupplied =
-    t?.confidenceBasis === "not_supplied" || (!t?.confidenceBasis && privateProvenance);
+  const confidenceEvidence = t?.confidenceEvidence ?? null;
   const hybridReview = t?.review;
+  const reviewItems = t?.reviewItems ?? [];
   const mockDraft = t?.aiMode === "mock";
   const fb = task.feedback;
   const fbApproved = fb?.status === "approved";
@@ -63,12 +71,13 @@ export function ReviewWorkflow({
       !verified &&
       t.aiMode === "real" &&
       (t.draftText.trim().length === 0 ||
-        (!confidenceNotSupplied && t.confidence < 0.6) ||
         (t.aiFlags ?? []).some(
           (flag) =>
-            (flag.severity === "high" && flag.category !== "requires_specialist_review") ||
             flag.category === "low_image_quality" ||
-            flag.category === "processing_failed",
+            flag.category === "processing_failed" ||
+            flag.category === "provider_unavailable" ||
+            flag.category === "pdf_processing_pending" ||
+            flag.category === "real_pupil_data_blocked",
         )),
   );
 
@@ -80,6 +89,9 @@ export function ReviewWorkflow({
   const [learner, setLearner] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
+  const [reviewedPassage, setReviewedPassage] = useState("");
+  const [reviewerNote, setReviewerNote] = useState("");
   const [pending, start] = useTransition();
   const [action, setAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +103,32 @@ export function ReviewWorkflow({
   const learnerValue = learner ?? fb?.learnerSummary ?? "";
   const feedbackApprovalBlocked = !commentsValue.trim() || !learnerValue.trim();
   const currentStage: SubmissionStage = !t ? 1 : !verified ? 2 : 3;
+  const selectedReviewItem = reviewItems.find((item) => item.id === selectedReviewId) ?? null;
+  const unresolvedRequiredCount = reviewItems.filter(
+    (item) =>
+      item.reviewStatus === "needs_rescan" ||
+      (item.uncertaintyState === "review_required" && item.reviewStatus === "unreviewed"),
+  ).length;
+
+  function selectReviewItem(item: TranscriptionReviewItem) {
+    setSelectedReviewId(item.id);
+    setReviewedPassage(item.reviewedText);
+    setReviewerNote(item.reviewerNote);
+  }
+
+  function reviewItem(nextStatus: Exclude<TranscriptionReviewStatus, "unreviewed">) {
+    if (!selectedReviewItem) return;
+    run(`review-${nextStatus}`, async () => {
+      await reviewTranscriptionItem(
+        task.id,
+        selectedReviewItem.id,
+        nextStatus,
+        reviewedPassage,
+        reviewerNote,
+      );
+      setText(null);
+    });
+  }
 
   function run(name: string, fn: () => Promise<void>) {
     setError(null);
@@ -173,7 +211,7 @@ export function ReviewWorkflow({
                   <p className="mt-1 text-xs text-zinc-500">The learner&apos;s translated work is the primary review surface.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-xs text-zinc-500">{confidenceNotSupplied ? "Confidence not supplied" : `${t.confidenceBasis === "consensus" ? "Consensus confidence" : "Confidence"} ${Math.round(t.confidence * 100)}%`}</span>
+                  <ConfidenceEvidenceLabel evidence={confidenceEvidence} />
                   <TranscriptionBadge status={t.status} />
                 </div>
               </CardHeader>
@@ -195,8 +233,22 @@ export function ReviewWorkflow({
                 )}
 
                 <div>
-                  <label htmlFor="transcript" className="mb-1.5 block text-sm font-medium text-zinc-700">English transcription</label>
-                  <textarea id="transcript" value={transcriptValue} onChange={(e) => setText(e.target.value)} readOnly={verified || !permissions.canEdit} rows={12} placeholder={needsSpecialistTranscription ? "Enter the specialist transcription from the source image." : undefined} className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-4 text-base leading-7 text-zinc-900 read-only:bg-zinc-50 focus:border-accent-500" />
+                  <p id="transcript-label" className="mb-1.5 text-sm font-medium text-zinc-700">English transcription</p>
+                  {!verified && reviewItems.length > 0 ? (
+                    <ReviewableTranslation
+                      text={transcriptValue}
+                      items={reviewItems}
+                      selectedId={selectedReviewId}
+                      onSelect={selectReviewItem}
+                    />
+                  ) : (
+                    <textarea id="transcript" aria-labelledby="transcript-label" value={transcriptValue} onChange={(e) => setText(e.target.value)} readOnly={verified || !permissions.canEdit} rows={12} placeholder={needsSpecialistTranscription ? "Enter the specialist transcription from the source image." : undefined} className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-4 text-base leading-7 text-zinc-900 read-only:bg-zinc-50 focus:border-accent-500" />
+                  )}
+                  {!verified && reviewItems.length === 0 && (
+                    <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+                      No passage-level uncertainty evidence was supplied or could be mapped safely to this text. Whole-document specialist verification still applies.
+                    </p>
+                  )}
                 </div>
                 {!verified && (
                   <div>
@@ -215,13 +267,19 @@ export function ReviewWorkflow({
                       mode={t.aiMode}
                       provider={t.aiProvider}
                       model={t.aiModel}
-                      confidence={confidenceNotSupplied || t.confidenceBasis === "consensus" ? null : t.confidence}
+                      confidence={confidenceEvidence?.kind === "provider_score" ? confidenceEvidence.value : null}
                       promptVersion={t.promptVersion}
                       processingMs={t.processingMs}
                       flagCount={t.aiFlags?.length}
                       unavailable={(t.aiFlags ?? []).some((f) => f.category === "provider_unavailable" || f.category === "processing_failed" || f.category === "real_pupil_data_blocked")}
                       redactProviderIdentity={privateProvenance}
                     />
+                    {confidenceEvidence && (
+                      <div className="rounded-lg bg-white px-3 py-2 text-xs leading-relaxed text-zinc-600">
+                        <span className="font-medium text-zinc-800">Confidence evidence:</span>{" "}
+                        {confidenceEvidence.meaning}
+                      </div>
+                    )}
                     {hybridReview && <HybridReviewEvidence review={hybridReview} />}
                   </div>
                 </details>
@@ -271,6 +329,21 @@ export function ReviewWorkflow({
           <Card>
             <CardHeader><CardTitle id="actions-review-heading">Actions & review</CardTitle></CardHeader>
             <CardBody className="space-y-4">
+              {!ended && t && !verified && reviewItems.length > 0 && (
+                <SelectedReviewContext
+                  item={selectedReviewItem}
+                  reviewedPassage={reviewedPassage}
+                  reviewerNote={reviewerNote}
+                  canReview={permissions.canVerify}
+                  pending={pending}
+                  action={action}
+                  unresolvedRequiredCount={unresolvedRequiredCount}
+                  onPassageChange={setReviewedPassage}
+                  onNoteChange={setReviewerNote}
+                  onReview={reviewItem}
+                />
+              )}
+
               {!ended && !t && (
                 <>
                   <p className="text-sm leading-relaxed text-zinc-600">Create the English draft from the uploaded Braille material.</p>
@@ -288,11 +361,11 @@ export function ReviewWorkflow({
                       {action === "rerun" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Re-run transcription
                     </button>
                   )}
-                  {permissions.canEdit && (
+                  {permissions.canEdit && reviewItems.length === 0 && (
                     <button onClick={() => run("save", () => saveTranscription(task.id, transcriptValue))} disabled={pending} className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{needsSpecialistTranscription ? "Save specialist transcription" : "Save edits"}</button>
                   )}
                   {permissions.canVerify ? (
-                    <button onClick={() => run("verify", () => verifyTranscription(task.id, transcriptValue, specialistNotes))} disabled={pending || mockDraft || transcriptValue.trim().length === 0} title={mockDraft ? "Run live transcription before specialist verification" : undefined} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
+                    <button onClick={() => run("verify", () => verifyTranscription(task.id, transcriptValue, specialistNotes))} disabled={pending || mockDraft || transcriptValue.trim().length === 0 || unresolvedRequiredCount > 0} title={mockDraft ? "Run live transcription before specialist verification" : unresolvedRequiredCount > 0 ? "Resolve every required-review passage before final verification" : undefined} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
                   ) : (<p className="text-xs leading-relaxed text-zinc-500">A QTVI, admin, or Braille-literate staff member must verify this.</p>)}
                 </>
               )}
@@ -364,6 +437,167 @@ export function ReviewWorkflow({
   );
 }
 
+function ConfidenceEvidenceLabel({ evidence }: { evidence: TranscriptionConfidenceEvidence | null }) {
+  if (!evidence || evidence.availability !== "available" || evidence.value === null) {
+    return <span className="text-xs text-zinc-500">Confidence unavailable</span>;
+  }
+  const label = evidence.kind === "engine_agreement" ? "Engine agreement" : "Provider document confidence";
+  return <span className="text-xs text-zinc-500">{label} {Math.round(evidence.value * 100)}%</span>;
+}
+
+function reviewItemLabel(item: TranscriptionReviewItem) {
+  if (item.reviewStatus === "confirmed") return "Confirmed";
+  if (item.reviewStatus === "corrected") return "Corrected";
+  if (item.reviewStatus === "needs_rescan") return "Needs re-scan";
+  return item.uncertaintyState === "review_required" ? "Review required" : "Review suggested";
+}
+
+function reviewItemIcon(item: TranscriptionReviewItem) {
+  if (item.reviewStatus === "confirmed") return <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />;
+  if (item.reviewStatus === "corrected") return <Pencil aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />;
+  if (item.reviewStatus === "needs_rescan") return <RefreshCw aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />;
+  return item.uncertaintyState === "review_required"
+    ? <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+    : <CircleAlert aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />;
+}
+
+function ReviewableTranslation({
+  text,
+  items,
+  selectedId,
+  onSelect,
+}: {
+  text: string;
+  items: TranscriptionReviewItem[];
+  selectedId: string | null;
+  onSelect: (item: TranscriptionReviewItem) => void;
+}) {
+  const ordered = [...items].sort((a, b) => a.start - b.start);
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const item of ordered) {
+    if (item.start < cursor || item.end > text.length || text.slice(item.start, item.end) !== item.reviewedText) continue;
+    if (item.start > cursor) parts.push(<span key={`text-${cursor}`}>{text.slice(cursor, item.start)}</span>);
+    const required = item.uncertaintyState === "review_required";
+    const completed = item.reviewStatus === "confirmed" || item.reviewStatus === "corrected";
+    parts.push(
+      <button
+        key={item.id}
+        type="button"
+        aria-pressed={selectedId === item.id}
+        aria-label={`${reviewItemLabel(item)}: ${item.reviewedText}`}
+        onClick={() => onSelect(item)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect(item);
+          }
+        }}
+        className={`mx-0.5 inline-flex items-baseline gap-1 rounded-md border px-1.5 py-0.5 text-left font-medium underline decoration-dotted underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 ${
+          completed
+            ? "border-positive-200 bg-positive-50 text-positive-800"
+            : item.reviewStatus === "needs_rescan"
+              ? "border-critical-300 bg-critical-50 text-critical-800"
+              : required
+                ? "border-critical-200 bg-critical-50 text-critical-800"
+                : "border-caution-200 bg-caution-50 text-caution-800"
+        } ${selectedId === item.id ? "ring-2 ring-accent-500 ring-offset-1" : ""}`}
+      >
+        {reviewItemIcon(item)}
+        <span>{item.reviewedText}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide">{reviewItemLabel(item)}</span>
+      </button>,
+    );
+    cursor = item.end;
+  }
+  if (cursor < text.length) parts.push(<span key={`text-${cursor}`}>{text.slice(cursor)}</span>);
+
+  return (
+    <div
+      role="group"
+      aria-labelledby="transcript-label"
+      className="min-h-72 whitespace-pre-wrap rounded-xl border border-zinc-200 bg-white px-4 py-4 text-base leading-8 text-zinc-900"
+    >
+      {parts}
+    </div>
+  );
+}
+
+function SelectedReviewContext({
+  item,
+  reviewedPassage,
+  reviewerNote,
+  canReview,
+  pending,
+  action,
+  unresolvedRequiredCount,
+  onPassageChange,
+  onNoteChange,
+  onReview,
+}: {
+  item: TranscriptionReviewItem | null;
+  reviewedPassage: string;
+  reviewerNote: string;
+  canReview: boolean;
+  pending: boolean;
+  action: string | null;
+  unresolvedRequiredCount: number;
+  onPassageChange: (value: string) => void;
+  onNoteChange: (value: string) => void;
+  onReview: (status: Exclude<TranscriptionReviewStatus, "unreviewed">) => void;
+}) {
+  if (!item) {
+    return (
+      <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-3 text-sm text-zinc-600">
+        <p className="font-medium text-zinc-800">Select a marked passage</p>
+        <p className="mt-1 text-xs leading-relaxed">Use the highlighted controls in the translated content. {unresolvedRequiredCount} required-review item{unresolvedRequiredCount === 1 ? " remains" : "s remain"}.</p>
+      </div>
+    );
+  }
+
+  const source = item.evidenceSource === "ocr_provider_flag"
+    ? "OCR provider uncertainty flag"
+    : item.evidenceSource === "secondary_ai_review"
+      ? "Secondary AI discrepancy review"
+      : "General vision model uncertainty flag";
+
+  return (
+    <section aria-labelledby="selected-review-heading" className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3.5">
+      <div>
+        <p className="eyebrow">Selected review item</p>
+        <h3 id="selected-review-heading" className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-zinc-900">
+          {reviewItemIcon(item)} {reviewItemLabel(item)}
+        </h3>
+      </div>
+      <dl className="space-y-2 text-xs">
+        <div><dt className="font-medium text-zinc-500">Original machine output</dt><dd className="mt-0.5 rounded-md bg-white px-2.5 py-2 text-sm text-zinc-800">{item.machineText}</dd></div>
+        <div><dt className="font-medium text-zinc-500">Evidence source</dt><dd className="mt-0.5 text-zinc-700">{source}</dd></div>
+        <div><dt className="font-medium text-zinc-500">Why it was flagged</dt><dd className="mt-0.5 leading-relaxed text-zinc-700">{item.reason}</dd></div>
+        <div><dt className="font-medium text-zinc-500">Passage confidence</dt><dd className="mt-0.5 text-zinc-700">Not supplied</dd></div>
+        {item.alternativeText && <div><dt className="font-medium text-zinc-500">Underlying review suggestion</dt><dd className="mt-0.5 text-zinc-700">{item.alternativeText}</dd></div>}
+      </dl>
+      <div>
+        <label htmlFor="reviewed-passage" className="text-xs font-medium text-zinc-600">Current / verified output</label>
+        <textarea id="reviewed-passage" value={reviewedPassage} onChange={(event) => onPassageChange(event.target.value)} readOnly={!canReview} rows={3} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 read-only:bg-zinc-100" />
+      </div>
+      {canReview && (
+        <>
+          <div>
+            <label htmlFor="reviewer-note" className="text-xs font-medium text-zinc-600">Reviewer note <span className="font-normal text-zinc-400">(optional)</span></label>
+            <textarea id="reviewer-note" value={reviewerNote} onChange={(event) => onNoteChange(event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800" />
+          </div>
+          <div className="grid gap-2">
+            <button type="button" onClick={() => onReview("confirmed")} disabled={pending} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-3 text-xs font-medium text-white disabled:opacity-50">{action === "review-confirmed" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Confirm interpretation</button>
+            <button type="button" onClick={() => onReview("corrected")} disabled={pending || !reviewedPassage.trim()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 disabled:opacity-50">{action === "review-corrected" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}Save corrected translation</button>
+            <button type="button" onClick={() => onReview("needs_rescan")} disabled={pending} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-critical-200 bg-white px-3 text-xs font-medium text-critical-700 disabled:opacity-50">{action === "review-needs_rescan" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Needs re-scan</button>
+          </div>
+        </>
+      )}
+      {!canReview && <p className="text-xs leading-relaxed text-zinc-500">Specialist actions are unavailable for your role.</p>}
+    </section>
+  );
+}
+
 function HybridReviewEvidence({ review }: { review: BrailleHybridReview }) {
   const agreement = review.primaryBackTranslationAgreement;
   const completed = review.status === "completed";
@@ -387,7 +621,7 @@ function HybridReviewEvidence({ review }: { review: BrailleHybridReview }) {
 
       <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
         <div className="rounded-lg bg-white px-3 py-2 text-zinc-600">
-          <span className="block text-zinc-400">Primary / back-translation agreement</span>
+          <span className="block text-zinc-400">Exact character agreement</span>
           <span className="mt-0.5 block font-semibold text-zinc-800">
             {agreement === null ? "Not available" : `${Math.round(agreement * 100)}%`}
           </span>
@@ -412,7 +646,7 @@ function HybridReviewEvidence({ review }: { review: BrailleHybridReview }) {
                 <span className="font-semibold text-zinc-800">{item.lineNumber ? `Line ${item.lineNumber}` : "Line not identified"}</span>
                 <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600">{item.issueType.replace(/_/g, " ")}</span>
                 <span className={item.severity === "high" ? "text-critical-600" : item.severity === "medium" ? "text-caution-700" : "text-zinc-500"}>
-                  {item.severity} · {Math.round(item.confidence * 100)}% finding confidence
+                  {item.severity} review priority
                 </span>
               </div>
               <p className="mt-2 text-sm text-zinc-700">
