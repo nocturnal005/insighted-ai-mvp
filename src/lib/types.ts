@@ -63,6 +63,40 @@ export interface StoredAiFlag {
   severity: "low" | "medium" | "high";
 }
 
+export type TranscriptionReviewStatus = "unreviewed" | "confirmed" | "corrected" | "needs_rescan";
+export type TranscriptionUncertaintyState = "review_suggested" | "review_required";
+
+/** Passage-level uncertainty that can be mapped exactly onto visible translated text. */
+export interface TranscriptionReviewItem {
+  id: string;
+  start: number;
+  end: number;
+  machineText: string;
+  reviewedText: string;
+  uncertaintyState: TranscriptionUncertaintyState;
+  reviewStatus: TranscriptionReviewStatus;
+  category: string;
+  severity: "low" | "medium" | "high";
+  reason: string;
+  evidenceSource: "ocr_provider_flag" | "secondary_ai_review" | "general_vision_flag";
+  confidence: number | null;
+  confidenceSource: string | null;
+  alternativeText: string | null;
+  reviewerNote: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+}
+
+export interface TranscriptionConfidenceEvidence {
+  availability: "available" | "unavailable";
+  value: number | null;
+  kind: "provider_score" | "engine_agreement" | "unavailable";
+  granularity: "document";
+  source: string;
+  meaning: string;
+  providerSupplied: boolean;
+}
+
 export type BrailleReviewStatus = "completed" | "skipped" | "unavailable" | "failed";
 
 export type BrailleDiscrepancyType =
@@ -107,6 +141,12 @@ export interface Transcription {
   status: TranscriptionStatus;
   confidence: number;
   confidenceBasis?: "provider" | "consensus" | "not_supplied";
+  /** Optional for backward compatibility; absence is rendered as unavailable, never inferred. */
+  confidenceEvidence?: TranscriptionConfidenceEvidence | null;
+  /** Optional for historical submissions created before confidence-aware verification. */
+  reviewItems?: TranscriptionReviewItem[] | null;
+  /** High-priority reasons that could not be attached to an unambiguous text range. */
+  additionalReviewIssues?: string[] | null;
   lowConfidenceRegions: LowConfidenceRegion[];
   engine: string;
   specialistVerifiedBy: string | null;
@@ -313,7 +353,9 @@ export interface EvalSample {
   // Which engine produced the last prediction (optional for seed compatibility).
   provider?: string | null;
   model?: string | null;
+  /** Provider-supplied document score only; engine agreement never belongs here. */
   confidence?: number | null;
+  confidenceEvidenceKind?: TranscriptionConfidenceEvidence["kind"] | null;
   reviewDiscrepancyCount?: number | null;
   primaryLiblouisAgreement?: number | null;
   aiMode?: "mock" | "real" | null;

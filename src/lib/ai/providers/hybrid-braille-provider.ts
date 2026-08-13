@@ -62,23 +62,6 @@ function disagreementFlags(
   });
 }
 
-function consensusConfidence(
-  agreement: number | null,
-  discrepancies: Awaited<ReturnType<typeof reviewBrailleWithOpenAI>>["discrepancies"],
-): number {
-  if (agreement === null) return 0;
-  const penalty = Math.min(
-    0.35,
-    discrepancies.reduce((total, item) => {
-      if (item.severity === "high") return total + 0.08;
-      if (item.severity === "medium") return total + 0.04;
-      return total + 0.015;
-    }, 0),
-  );
-  // Cap at 0.9: ABC and Liblouis are correlated because Liblouis consumes ABC's cell data.
-  return clampConfidence(0.9 * agreement - penalty);
-}
-
 export async function transcribeBrailleWithHybridReview(input: BrailleOcrInput): Promise<BrailleOcrResult> {
   const timer = startRun();
   const primary = await transcribeBrailleWithAbc(input);
@@ -140,8 +123,29 @@ export async function transcribeBrailleWithHybridReview(input: BrailleOcrInput):
   return {
     // Safety invariant: the secondary model never becomes the source of the draft.
     draftText: primary.draftText,
-    confidence: consensusConfidence(agreement, review.discrepancies),
+    // Exact agreement is useful review evidence, but it is not an OCR accuracy estimate.
+    confidence: agreement ?? 0,
     confidenceBasis: hasConsensus ? "consensus" : "not_supplied",
+    confidenceEvidence: hasConsensus
+      ? {
+          availability: "available",
+          value: agreement,
+          kind: "engine_agreement",
+          granularity: "document",
+          source: "Primary OCR / deterministic back-translation comparison",
+          meaning:
+            "Exact character agreement between the primary OCR draft and deterministic back-translation. The engines are correlated, so this is not an accuracy guarantee.",
+          providerSupplied: false,
+        }
+      : {
+          availability: "unavailable",
+          value: null,
+          kind: "unavailable",
+          granularity: "document",
+          source: "Primary OCR / deterministic back-translation comparison",
+          meaning: "Agreement evidence is unavailable because no deterministic back-translation was produced.",
+          providerSupplied: false,
+        },
     flags: [...primary.flags, ...supplementalFlags, ...reviewFlags],
     rawBraille: primary.rawBraille ?? null,
     rawCells: primary.rawCells,

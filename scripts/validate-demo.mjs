@@ -77,7 +77,11 @@ const checks = [
   },
   {
     file: ".github/workflows/ci.yml",
-    mustContain: ["npm run typecheck", "npm run build", "npm run validate", "node-version: 20"],
+    // Node 22, not 20: the Stage 2 behavioural suite (`npm test`) runs the TypeScript
+    // sources through Node's type stripping, which 20 does not have. The application and
+    // `npm run validate` still work on 20 — those validators transpile TypeScript
+    // themselves — so this pins the CI runner, not the supported runtime.
+    mustContain: ["npm run typecheck", "npm run build", "npm test", "npm run validate", "node-version: 22"],
   },
   {
     file: "package.json",

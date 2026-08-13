@@ -82,7 +82,17 @@ export async function transcribeBrailleMock(input: BrailleOcrInput): Promise<Bra
 
   return {
     draftText: sample.text,
-    confidence: effectiveConfidence(sample.confidence, sampleFlags),
+    confidence: 0,
+    confidenceBasis: "not_supplied",
+    confidenceEvidence: {
+      availability: "unavailable",
+      value: null,
+      kind: "unavailable",
+      granularity: "document",
+      source: "Deterministic demo fixture",
+      meaning: "Mock output does not provide real confidence evidence.",
+      providerSupplied: false,
+    },
     flags,
     rawBraille: null,
     rawCells: null,

@@ -8,6 +8,7 @@ import { db, id, recordAudit, createUpload, getUploadById, deleteUploadById, upl
 import { transcribeBraille, simulateOcrMock, summariseFlags, toStoredFlags, getAiConfig } from "@/lib/ai";
 import { assertValidUpload } from "@/lib/upload-guard";
 import { scorePair } from "@/lib/metrics";
+import { providerDocumentConfidence } from "@/lib/quality-confidence";
 import type { EvalSample } from "@/lib/types";
 
 type BrailleType = EvalSample["brailleType"];
@@ -111,13 +112,14 @@ export async function runEvaluation() {
       prediction = r.draftText;
       provider = r.meta.provider;
       model = r.meta.model;
-      confidence = r.confidenceBasis === "not_supplied" ? null : r.confidence;
+      confidence = providerDocumentConfidence(r.confidenceEvidence);
       aiMode = r.meta.mode;
       flagSummary = summariseFlags(r.flags);
       promptVersion = r.meta.promptVersion;
       sample.aiFlags = toStoredFlags(r.flags);
       sample.reviewDiscrepancyCount = r.review?.discrepancies.length ?? null;
       sample.primaryLiblouisAgreement = r.review?.primaryLiblouisAgreement ?? null;
+      sample.confidenceEvidenceKind = r.confidenceEvidence?.kind ?? "unavailable";
       aggregateFlags.push(...flagSummary);
     } else {
       // No source image — use mock simulation and label it clearly.
@@ -130,6 +132,7 @@ export async function runEvaluation() {
       sample.aiFlags = null;
       sample.reviewDiscrepancyCount = null;
       sample.primaryLiblouisAgreement = null;
+      sample.confidenceEvidenceKind = "unavailable";
     }
 
     const s = scorePair(prediction, sample.groundTruthText);

@@ -95,7 +95,6 @@ const structuredFlagSchema = z
 
 const brailleSchema = z.object({
   draftText: z.string(),
-  confidence: z.number().optional(),
   flags: z.array(rawFlagSchema).optional(),
 });
 
@@ -489,11 +488,20 @@ export async function transcribeBrailleWithOpenAIDraft(input: BrailleOcrInput): 
     }
     const modelFlags = mapRawFlags(parsed.flags, "low_ocr_confidence");
     const flags = [specialistFlag, draftOnlyFlag, ...modelFlags];
-    // Cap OpenAI Braille confidence conservatively — it is not specialist OCR.
-    const conservative = Math.min(clampConfidence(parsed.confidence ?? 0.4), 0.6);
+    // A general-purpose model's self-rating is not accepted as Braille OCR confidence.
     return {
       draftText: parsed.draftText,
-      confidence: conservative,
+      confidence: 0,
+      confidenceBasis: "not_supplied",
+      confidenceEvidence: {
+        availability: "unavailable",
+        value: null,
+        kind: "unavailable",
+        granularity: "document",
+        source: "General-purpose vision model",
+        meaning: "General-purpose vision output is not treated as calibrated Braille OCR confidence.",
+        providerSupplied: false,
+      },
       flags,
       rawBraille: null,
       rawCells: null,
@@ -546,6 +554,16 @@ function brailleFallback(timer: RunTimer, model: string, flags: UncertaintyFlag[
   return {
     draftText: "",
     confidence: 0,
+    confidenceBasis: "not_supplied",
+    confidenceEvidence: {
+      availability: "unavailable",
+      value: null,
+      kind: "unavailable",
+      granularity: "document",
+      source: "General-purpose vision model",
+      meaning: "No calibrated Braille OCR confidence is available.",
+      providerSupplied: false,
+    },
     flags,
     rawBraille: null,
     rawCells: null,

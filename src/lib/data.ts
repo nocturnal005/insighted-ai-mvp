@@ -1,5 +1,6 @@
 import { db } from "@/lib/store";
 import type { BrailleTask, Pupil, StemTask, VisualDescriptionTask } from "@/lib/types";
+import { averageProviderDocumentConfidence } from "@/lib/quality-confidence";
 
 /** Read helpers. All scoped to the demo organisation. */
 
@@ -45,7 +46,7 @@ export interface QualityStats {
   evalAvgCer: number | null;
   // Aggregate evaluation metrics across evaluated samples.
   evalAvgWer: number | null;
-  evalAvgConfidence: number | null;
+  evalAvgProviderConfidence: number | null;
   byProvider: Array<{ key: string; count: number }>;
   byBrailleType: Array<{ key: string; count: number }>;
   topFlagCategories: Array<{ key: string; count: number }>;
@@ -66,7 +67,6 @@ export function getQualityStats(): QualityStats {
     return [...m.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);
   };
 
-  const confidences = run.map((s) => s.confidence).filter((x): x is number => typeof x === "number");
   const flagCategories: string[] = [];
   for (const s of run) for (const f of s.aiFlags ?? []) flagCategories.push(f.category);
 
@@ -78,7 +78,7 @@ export function getQualityStats(): QualityStats {
     evaluated: run.length,
     evalAvgCer: avg(run.map((s) => s.cer as number)),
     evalAvgWer: avg(run.map((s) => s.wer as number)),
-    evalAvgConfidence: avg(confidences),
+    evalAvgProviderConfidence: averageProviderDocumentConfidence(run),
     byProvider: tally(run.map((s) => s.provider)),
     byBrailleType: tally(db.evalSamples.map((s) => s.brailleType)),
     topFlagCategories: tally(flagCategories).slice(0, 6),

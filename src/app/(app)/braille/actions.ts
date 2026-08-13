@@ -10,7 +10,15 @@ import { hydrateBrailleTask, persistBrailleTask } from "@/lib/durable-braille";
 import { transcribeBraille, mapFlagsToLowConfidenceRegions, summariseFlags, toStoredFlags } from "@/lib/ai";
 import { assertVisionImageUpload } from "@/lib/upload-guard";
 import { generateFeedback } from "@/lib/feedback";
-import type { BrailleTask } from "@/lib/types";
+import type { BrailleTask, TranscriptionReviewStatus } from "@/lib/types";
+import { closedTaskError, planReviewItemMutation } from "@/lib/verification/review-guards";
+import {
+  buildTranscriptionReviewItems,
+  buildUnmappedHighPriorityIssues,
+  remapReviewItemsAfterWholeDocumentEdit,
+  storedConfidenceEvidence,
+  unresolvedRequiredReviewItems,
+} from "@/lib/verification/confidence";
 
 export async function createBrailleTask(formData: FormData) {
   const user = await requireUser();
@@ -100,6 +108,8 @@ async function executeTranscription(
   });
 
   const regions = mapFlagsToLowConfidenceRegions(result.flags);
+  const confidenceEvidence = storedConfidenceEvidence(result);
+  const reviewItems = buildTranscriptionReviewItems(result);
   task.transcription = {
     draftText: result.draftText,
     editedText: result.draftText,
@@ -107,6 +117,9 @@ async function executeTranscription(
     status: "needs_specialist_review",
     confidence: result.confidence,
     confidenceBasis: result.confidenceBasis,
+    confidenceEvidence,
+    reviewItems,
+    additionalReviewIssues: buildUnmappedHighPriorityIssues(result),
     lowConfidenceRegions: regions,
     engine: result.meta.model,
     specialistVerifiedBy: null,
@@ -154,7 +167,8 @@ async function executeTranscription(
     newStatus: task.status,
     provider: result.meta.provider,
     model: result.meta.model,
-    confidence: result.confidenceBasis === "not_supplied" ? null : result.confidence,
+    confidence:
+      confidenceEvidence.kind === "provider_score" ? confidenceEvidence.value : null,
     processingMs: result.meta.processingMs,
     aiMode: result.meta.mode,
     promptVersion: result.meta.promptVersion,
@@ -198,7 +212,17 @@ export async function saveTranscription(taskId: string, editedText: string) {
   if (!can(user.role, "transcription.edit")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
   if (!task?.transcription) throw new Error("Nothing to edit");
+  const closed = closedTaskError(task.status);
+  if (closed) throw new Error(closed);
   if (task.transcription.status === "specialist_verified") throw new Error("Already verified and locked");
+  const reviewItems = task.transcription.reviewItems ?? [];
+  if (reviewItems.length > 0) {
+    task.transcription.reviewItems = remapReviewItemsAfterWholeDocumentEdit(
+      task.transcription.editedText,
+      editedText,
+      reviewItems,
+    );
+  }
 
   task.transcription.editedText = editedText;
   task.updatedAt = new Date().toISOString();
@@ -215,6 +239,65 @@ export async function saveTranscription(taskId: string, editedText: string) {
   revalidatePath(`/braille/${taskId}`);
 }
 
+export async function reviewTranscriptionItem(
+  taskId: string,
+  itemId: string,
+  nextStatus: Exclude<TranscriptionReviewStatus, "unreviewed">,
+  reviewedText: string,
+  reviewerNote = "",
+) {
+  const user = await requireUser();
+  if (!can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate })) {
+    throw new Error("Only authorised Braille specialists can review flagged passages");
+  }
+  if (!(["confirmed", "corrected", "needs_rescan"] as const).includes(nextStatus)) {
+    throw new Error("Invalid review state");
+  }
+
+  const task = await hydrateBrailleTask(taskId);
+  const transcription = task?.transcription;
+  if (!task || !transcription) throw new Error("Nothing to review");
+
+  // Every rule about WHETHER this review may happen, and what it changes, lives in
+  // planReviewItemMutation — including the closed-task lifecycle boundary and the
+  // corrected/confirmed distinction. This action applies the plan; it does not restate it.
+  const reviewedAt = new Date().toISOString();
+  const plan = planReviewItemMutation({
+    taskStatus: task.status,
+    transcriptionStatus: transcription.status,
+    editedText: transcription.editedText,
+    items: transcription.reviewItems ?? [],
+    itemId,
+    nextStatus,
+    submittedText: reviewedText,
+    reviewerNote,
+    reviewedBy: user.id,
+    reviewedAt,
+  });
+  if (!plan.ok) throw new Error(plan.error);
+
+  transcription.editedText = plan.editedText;
+  transcription.reviewItems = plan.items;
+  const previousStatus = plan.previousStatus;
+  const item = plan.items.find((candidate) => candidate.id === itemId)!;
+  task.updatedAt = reviewedAt;
+
+  recordAudit({
+    actorId: user.id,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: `transcription.review_item.${nextStatus}`,
+    objectType: "Braille review passage",
+    objectLabel: task.title,
+    taskId: task.id,
+    previousStatus,
+    newStatus: nextStatus,
+    reason: item.reviewerNote || null,
+  });
+  await persistBrailleTask(task);
+  revalidatePath(`/braille/${taskId}`);
+}
+
 export async function verifyTranscription(taskId: string, finalText: string, specialistNotes = "") {
   const user = await requireUser();
   if (!can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate })) {
@@ -225,6 +308,15 @@ export async function verifyTranscription(taskId: string, finalText: string, spe
   if (!finalText.trim()) throw new Error("A specialist-reviewed transcription is required");
   if (task.transcription.aiMode === "mock") {
     throw new Error("Demo placeholder text cannot be specialist-verified. Run live transcription or enter a supported source workflow.");
+  }
+  const unresolved = unresolvedRequiredReviewItems(task.transcription.reviewItems);
+  if (unresolved.length > 0) {
+    throw new Error(
+      `${unresolved.length} required-review passage${unresolved.length === 1 ? " is" : "s are"} unresolved`,
+    );
+  }
+  if ((task.transcription.reviewItems ?? []).length > 0 && finalText !== task.transcription.editedText) {
+    throw new Error("Save flagged-passage decisions before final specialist verification");
   }
 
   const previousStatus = task.status;

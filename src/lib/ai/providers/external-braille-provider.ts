@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { BrailleOcrInput, BrailleOcrResult, UncertaintyCategory, UncertaintyFlag } from "../types";
 import { getBrailleEndpointConfig } from "../config";
 import { startRun, finishMeta, type RunTimer } from "../meta";
-import { clampConfidence, effectiveConfidence } from "../confidence";
+import { clampConfidence } from "../confidence";
 import { makeFlag, processingFailedFlag, providerUnavailableFlag, requiresSpecialistReviewFlag } from "../uncertainty";
 import { safeErrorLabel } from "../safety";
 import { getBrailleTranslationProvider } from "./braille-translation-provider";
@@ -142,16 +142,38 @@ export async function transcribeBrailleExternal(input: BrailleOcrInput): Promise
     }
 
     const flags = [specialistFlag, ...modelFlags, ...backTranslationFlags];
+    const providerConfidenceSupplied = parsed.confidence !== undefined;
     const pageResults = (parsed.pageResults ?? []).map((p, i) => ({
       pageNumber: p.pageNumber ?? i + 1,
       text: p.text,
-      confidence: clampConfidence(p.confidence ?? 0),
+      confidence: p.confidence === undefined ? null : clampConfidence(p.confidence),
       flags: (p.flags ?? []).map(toFlag),
     }));
 
     return {
       draftText: parsed.draftText,
-      confidence: effectiveConfidence(clampConfidence(parsed.confidence ?? 0.5), modelFlags),
+      confidence: providerConfidenceSupplied ? clampConfidence(parsed.confidence) : 0,
+      confidenceBasis: providerConfidenceSupplied ? "provider" : "not_supplied",
+      confidenceEvidence: providerConfidenceSupplied
+        ? {
+            availability: "available",
+            value: clampConfidence(parsed.confidence),
+            kind: "provider_score",
+            granularity: "document",
+            source: "External OCR provider",
+            meaning:
+              "Whole-document score supplied by the configured OCR provider. No calibrated Braivanta routing threshold is applied.",
+            providerSupplied: true,
+          }
+        : {
+            availability: "unavailable",
+            value: null,
+            kind: "unavailable",
+            granularity: "document",
+            source: "External OCR provider",
+            meaning: "The OCR provider did not supply a whole-document confidence score.",
+            providerSupplied: false,
+          },
       flags,
       rawBraille: parsed.rawBraille ?? null,
       rawCells: parsed.rawCells ?? null,
@@ -169,6 +191,16 @@ function fallback(timer: RunTimer, flags: UncertaintyFlag[]): BrailleOcrResult {
   return {
     draftText: "",
     confidence: 0,
+    confidenceBasis: "not_supplied",
+    confidenceEvidence: {
+      availability: "unavailable",
+      value: null,
+      kind: "unavailable",
+      granularity: "document",
+      source: "External OCR provider",
+      meaning: "No confidence evidence is available because the OCR run did not complete.",
+      providerSupplied: false,
+    },
     flags,
     rawBraille: null,
     rawCells: null,
