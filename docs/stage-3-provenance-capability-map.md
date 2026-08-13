@@ -38,6 +38,8 @@ The external engine contract proves that `rawCells[]` means detected 6-dot cells
 
 ## Implemented provenance boundary
 
+- Braivanta's configured standards decision-support registry is not provider/run provenance. A rule being evaluated by Braivanta does not prove that the OCR provider applied that standard or translation table.
+- `TranscriptionProvenance` contains only evidence about the OCR/transcription run. It does not carry Braivanta's UEB rule profile.
 - Only `external_braille_ocr` records that pass the exact typed cell schema become `CellEvidence`.
 - Every cell receives a Braivanta-owned ID beginning `braivanta-cell-`; `providerCellId` remains `null` because the provider does not supply one.
 - Provider working-image boxes are retained with `sourceImageAligned: false`; no crop or highlight is generated.
@@ -50,6 +52,10 @@ The external engine contract proves that `rawCells[]` means detected 6-dot cells
 
 The authoritative standard is the ICEB [Rules of Unified English Braille, Third Edition 2024](https://iceb.org/Rules%20of%20Unified%20English%20Braille%202024.pdf). ICEB identifies that rulebook as definitive. UKAAF [identifies ICEB as the authoritative UEB source](https://www.ukaaf.org/standards/ueb/) and supplements it with UK guidance, but no additional UKAAF rule is encoded in this stage because the available provenance does not justify a reliable UK-specific automated check.
 
-One bounded rule is registered: `UEB-6.1.1`, limited to recognising the twelve numeric-indicator sequences listed in section 6.1. It can report `consistent` when an exact raw-Braille sequence exists, `not_applicable` when none exists, or `insufficient_evidence` when raw Braille is unavailable. It does not infer a conflict from absence because the print context is unavailable, and it does not assess the remainder or termination of numeric mode.
+One bounded rule is registered: `UEB-6.1.1`, limited to recognising the twelve numeric-indicator sequences listed in section 6.1. Every new evaluation separately records why Braivanta considered UEB applicable. The current application establishes that context only for its explicitly configured ABC and hybrid UEB workflows; the configuration is decision-support context and is not proof that the provider applied UEB. Other paths, including external OCR with raw Braille but no explicit UEB context, receive `insufficient_evidence` rather than an inferred UEB result.
+
+Where the Braivanta UEB context is explicitly established, the rule can report `consistent` when an exact raw-Braille sequence exists, `not_applicable` when none exists, or `insufficient_evidence` when raw Braille is unavailable. It does not infer a conflict from absence because the print context is unavailable, and it does not assess the remainder or termination of numeric mode.
+
+Early Stage 3 evaluation records that do not contain an applicability basis remain readable, but the UI presents them conservatively as `insufficient_evidence` and does not permit a new confirmation decision based on the missing context.
 
 These results are decision support only. They are not comprehensive UEB or UKAAF coverage and are not compliance certification.

@@ -3,7 +3,6 @@ import type { BrailleOcrResult } from "./ai/types";
 import type {
   BrailleCellEvidence,
   BraillePageEvidence,
-  StandardsProfile,
   TranscriptionProvenance,
 } from "./types";
 
@@ -29,14 +28,6 @@ const rawCellSchema = z
       cell.bbox[3] > cell.bbox[1],
     "bounding box must contain finite provider working-image coordinates",
   );
-
-export const STAGE3_STANDARDS_PROFILE: StandardsProfile = {
-  family: "UEB",
-  version: "Third Edition 2024",
-  sourceReference: "https://iceb.org/Rules%20of%20Unified%20English%20Braille%202024.pdf",
-  coverage: "bounded_rule_registry",
-  providerTable: null,
-};
 
 function normalizedSymbol(dots: number[]): string {
   let mask = 0;
@@ -129,7 +120,6 @@ export function buildTranscriptionProvenance(result: BrailleOcrResult): Transcri
     engineVersion: result.meta.engineVersion,
     evidenceContract: isExternal ? EXTERNAL_CONTRACT : null,
     pages: page ? [page] : [],
-    standardsProfile: STAGE3_STANDARDS_PROFILE,
     limitations: page
       ? [
           "Evidence is page-level because no current provider maps Braille cells to English passages.",

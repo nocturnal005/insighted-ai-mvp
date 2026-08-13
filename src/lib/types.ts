@@ -138,14 +138,6 @@ export interface BraillePageEvidence {
   limitations: string[];
 }
 
-export interface StandardsProfile {
-  family: "UEB";
-  version: "Third Edition 2024";
-  sourceReference: string;
-  coverage: "bounded_rule_registry";
-  providerTable: null;
-}
-
 export interface TranscriptionProvenance {
   version: "1";
   availability: ProvenanceAvailability;
@@ -154,7 +146,17 @@ export interface TranscriptionProvenance {
   engineVersion: string | null;
   evidenceContract: string | null;
   pages: BraillePageEvidence[];
-  standardsProfile: StandardsProfile;
+  limitations: string[];
+}
+
+/** Why Braivanta may apply a standards rule. This is not OCR/provider provenance. */
+export interface StandardsApplicability {
+  standardFamily: "UEB";
+  basis: "configured_workflow" | "unavailable";
+  evidenceStatus: "supported" | "unavailable";
+  context: string;
+  source: string | null;
+  providerProof: "not_established";
   limitations: string[];
 }
 
@@ -186,6 +188,8 @@ export interface StandardRuleEvaluation {
   evaluatedAt: string;
   evidenceSummary: string;
   evidenceCellIds: string[];
+  /** Optional for early Stage 3 records; every new evaluation records its applicability basis. */
+  applicability?: StandardsApplicability;
   implementationScope: string;
   limitations: string[];
   /** Append-only specialist decisions; the automated result above is never overwritten. */

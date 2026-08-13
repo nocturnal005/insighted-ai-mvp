@@ -8,9 +8,18 @@ import {
   sourceEvidenceForReview,
 } from "../src/lib/provenance.ts";
 import { evaluateRegisteredStandards, planStandardsOverride } from "../src/lib/standards/evaluation.ts";
-import type { BrailleTask } from "../src/lib/types.ts";
+import type { BrailleTask, StandardsApplicability } from "../src/lib/types.ts";
 
 const completedAt = "2026-08-13T12:00:00.000Z";
+const explicitUebContext: StandardsApplicability = {
+  standardFamily: "UEB",
+  basis: "configured_workflow",
+  evidenceStatus: "supported",
+  context: "Controlled UEB test workflow.",
+  source: "Controlled test configuration",
+  providerProof: "not_established",
+  limitations: ["Not provider proof."],
+};
 
 function result(
   provider: string,
@@ -114,7 +123,7 @@ test("P6: Braivanta cell IDs are distinguishable from provider IDs", () => {
   assert.equal(cell.providerCellId, null);
 });
 
-test("P7: supported provenance survives the JSON persistence shape", () => {
+test("P7: transcription provenance contains only provider/run evidence", () => {
   const provenance = buildTranscriptionProvenance(
     result("external_braille_ocr", {
       rawBraille: "⠼⠁",
@@ -122,15 +131,15 @@ test("P7: supported provenance survives the JSON persistence shape", () => {
       pageResults: [{ pageNumber: 1, text: "1", confidence: 0.8, flags: [] }],
     }),
   );
-  const reloaded = JSON.parse(JSON.stringify({ transcription: { provenance } }));
-  assert.deepEqual(reloaded.transcription.provenance, provenance);
+  assert.equal("standardsProfile" in provenance, false);
+  assert.equal(provenance.provider, "external_braille_ocr");
 });
 
 test("P8: a specialist standards decision preserves original machine evidence", () => {
   const provenance = buildTranscriptionProvenance(
     result("abc_braille_web", { rawBraille: "⠼⠁" }),
   );
-  const evaluations = evaluateRegisteredStandards(provenance, completedAt);
+  const evaluations = evaluateRegisteredStandards(provenance, explicitUebContext, completedAt);
   const original = structuredClone({ provenance, evaluation: evaluations[0] });
   const plan = planStandardsOverride({
     taskStatus: "needs_specialist_review",
@@ -166,7 +175,7 @@ test("P10: source evidence is removed from a non-specialist client view", () => 
     transcription: {
       aiProvider: "abc_braille_web",
       provenance,
-      standardsEvaluations: evaluateRegisteredStandards(provenance, completedAt),
+      standardsEvaluations: evaluateRegisteredStandards(provenance, explicitUebContext, completedAt),
     },
   } as unknown as BrailleTask;
   const hidden = redactPrivateBrailleProvenance(task, { includeSourceEvidence: false });

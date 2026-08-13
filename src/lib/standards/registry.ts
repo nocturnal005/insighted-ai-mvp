@@ -19,7 +19,8 @@ const UEB_NUMERIC_INDICATOR: RegisteredStandardRule = {
   description: "Recognised numeric indicators set numeric mode for the remainder of the symbols-sequence.",
   version: "Third Edition 2024",
   sourceReference: "https://iceb.org/Rules%20of%20Unified%20English%20Braille%202024.pdf#page=92",
-  applicableContext: "A raw 6-dot UEB sequence containing a numeric prefix followed by a digit or decimal-sign root.",
+  applicableContext:
+    "An explicitly established Braivanta UEB evaluation context with raw 6-dot Braille containing a numeric prefix followed by a digit or decimal-sign root.",
   implementationScope:
     "Detects only the twelve numeric-indicator sequences explicitly listed in UEB section 6.1.",
   limitations: [

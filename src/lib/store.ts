@@ -9,8 +9,8 @@ import type {
   User,
   VisualDescriptionTask,
 } from "@/lib/types";
-import { scorePair } from "@/lib/metrics";
-import { ROLE_STAFF_LABEL } from "@/lib/rbac";
+import { scorePair } from "./metrics.ts";
+import { ROLE_STAFF_LABEL } from "./rbac.ts";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 

@@ -771,14 +771,34 @@ function StandardsDecisionSupport({
         </p>
         {evaluations.map((evaluation) => {
           const latestOverride = evaluation.overrides.at(-1);
+          const applicability = evaluation.applicability;
+          const displayOutcome =
+            applicability?.basis === "configured_workflow" &&
+            applicability.evidenceStatus === "supported"
+              ? evaluation.automatedOutcome
+              : "insufficient_evidence";
           const prefix = `standards-${evaluation.ruleId}`;
           return (
             <section key={evaluation.ruleId} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3" aria-label={`${evaluation.ruleId} evaluation`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-mono text-[11px] font-semibold text-zinc-600">{evaluation.ruleId}</span>
-                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-zinc-700">{standardsOutcomeLabels[evaluation.automatedOutcome]}</span>
+                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-zinc-700">{standardsOutcomeLabels[displayOutcome]}</span>
               </div>
               <p className="mt-2 text-xs font-medium text-zinc-800">{evaluation.ruleTitle} · {evaluation.ruleVersion}</p>
+              <dl className="mt-2 grid gap-1.5 rounded-md bg-white px-2.5 py-2 text-xs leading-relaxed">
+                <div>
+                  <dt className="font-medium text-zinc-500">Evaluation context</dt>
+                  <dd className="text-zinc-700">
+                    {applicability?.context ?? "Applicability basis was not recorded for this historical evaluation."}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-zinc-500">Provider standards proof</dt>
+                  <dd className="text-zinc-700">
+                    Not established. Braivanta decision-support configuration is not provider/run provenance.
+                  </dd>
+                </div>
+              </dl>
               <p className="mt-1 text-xs leading-relaxed text-zinc-600">{evaluation.evidenceSummary}</p>
               <a href={evaluation.sourceReference} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-medium text-accent-700 hover:underline">Authoritative ICEB rule evidence</a>
               {latestOverride && (
@@ -791,12 +811,12 @@ function StandardsDecisionSupport({
                   <label htmlFor={`standards-reason-${evaluation.ruleId}`} className="text-xs font-medium text-zinc-600">Specialist decision reason</label>
                   <textarea id={`standards-reason-${evaluation.ruleId}`} value={reason} onChange={(event) => onReasonChange(event.target.value)} rows={2} className="w-full rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-xs" />
                   <div className="grid gap-2">
-                    {evaluation.automatedOutcome === "consistent" && (
+                    {displayOutcome === "consistent" && (
                       <button type="button" onClick={() => onOverride(evaluation.ruleId, "confirm_interpretation")} disabled={pending || !reason.trim()} className="h-8 rounded-md bg-zinc-900 px-2 text-xs font-medium text-white disabled:opacity-50">
                         {action === `${prefix}-confirm_interpretation` ? "Saving…" : "Confirm interpretation"}
                       </button>
                     )}
-                    {evaluation.automatedOutcome === "possible_conflict" && (
+                    {displayOutcome === "possible_conflict" && (
                       <button type="button" onClick={() => onOverride(evaluation.ruleId, "override_warning")} disabled={pending || !reason.trim()} className="h-8 rounded-md bg-zinc-900 px-2 text-xs font-medium text-white disabled:opacity-50">
                         {action === `${prefix}-override_warning` ? "Saving…" : "Override warning"}
                       </button>

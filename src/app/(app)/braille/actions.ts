@@ -20,6 +20,7 @@ import { buildTranscriptionProvenance } from "@/lib/provenance";
 import {
   evaluateRegisteredStandards,
   planStandardsOverride,
+  standardsApplicabilityForRun,
 } from "@/lib/standards/evaluation";
 import {
   buildTranscriptionReviewItems,
@@ -120,8 +121,10 @@ async function executeTranscription(
   const confidenceEvidence = storedConfidenceEvidence(result);
   const reviewItems = buildTranscriptionReviewItems(result);
   const provenance = buildTranscriptionProvenance(result);
+  const standardsApplicability = standardsApplicabilityForRun(result);
   const standardsEvaluations = evaluateRegisteredStandards(
     provenance,
+    standardsApplicability,
     result.meta.completedAt,
   );
   task.transcription = {
