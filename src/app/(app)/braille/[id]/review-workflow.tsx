@@ -17,14 +17,17 @@ import type {
   AuditEntry,
   BrailleHybridReview,
   BrailleTask,
+  StandardRuleEvaluation,
+  StandardsOverrideDecision,
   TranscriptionConfidenceEvidence,
+  TranscriptionProvenance,
   TranscriptionReviewItem,
   TranscriptionReviewStatus,
 } from "@/lib/types";
 import {
   runTranscription, rerunBrailleTranscription, saveTranscription, verifyTranscription,
   createFeedback, saveFeedback, approveFeedback, rejectBrailleTask, archiveBrailleTask,
-  reviewTranscriptionItem,
+  reviewTranscriptionItem, recordStandardsOverride,
 } from "../actions";
 
 interface Perms {
@@ -93,6 +96,7 @@ export function ReviewWorkflow({
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [reviewedPassage, setReviewedPassage] = useState("");
   const [reviewerNote, setReviewerNote] = useState("");
+  const [standardsReason, setStandardsReason] = useState("");
   const [pending, start] = useTransition();
   const [action, setAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +132,13 @@ export function ReviewWorkflow({
         reviewerNote,
       );
       setText(null);
+    });
+  }
+
+  function standardsOverride(ruleId: string, decision: StandardsOverrideDecision) {
+    run(`standards-${ruleId}-${decision}`, async () => {
+      await recordStandardsOverride(task.id, ruleId, decision, standardsReason);
+      setStandardsReason("");
     });
   }
 
@@ -382,9 +393,22 @@ export function ReviewWorkflow({
                   pending={pending}
                   action={action}
                   unresolvedRequiredCount={unresolvedRequiredCount}
+                  provenance={t.provenance ?? null}
                   onPassageChange={setReviewedPassage}
                   onNoteChange={setReviewerNote}
                   onReview={reviewItem}
+                />
+              )}
+
+              {!ended && t && !verified && (t.standardsEvaluations ?? []).length > 0 && (
+                <StandardsDecisionSupport
+                  evaluations={t.standardsEvaluations ?? []}
+                  canReview={permissions.canVerify}
+                  pending={pending}
+                  action={action}
+                  reason={standardsReason}
+                  onReasonChange={setStandardsReason}
+                  onOverride={standardsOverride}
                 />
               )}
 
@@ -575,6 +599,7 @@ function SelectedReviewContext({
   pending,
   action,
   unresolvedRequiredCount,
+  provenance,
   onPassageChange,
   onNoteChange,
   onReview,
@@ -586,6 +611,7 @@ function SelectedReviewContext({
   pending: boolean;
   action: string | null;
   unresolvedRequiredCount: number;
+  provenance: TranscriptionProvenance | null;
   onPassageChange: (value: string) => void;
   onNoteChange: (value: string) => void;
   onReview: (status: Exclude<TranscriptionReviewStatus, "unreviewed">) => void;
@@ -624,6 +650,12 @@ function SelectedReviewContext({
         <div><dt className="font-medium text-zinc-500">Passage confidence</dt><dd className="mt-0.5 text-zinc-700">Not supplied</dd></div>
         {item.alternativeText && <div><dt className="font-medium text-zinc-500">Underlying review suggestion</dt><dd className="mt-0.5 text-zinc-700">{item.alternativeText}</dd></div>}
       </dl>
+      {canReview && (
+        <details className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-zinc-700">View source evidence</summary>
+          <SourceEvidence provenance={provenance} />
+        </details>
+      )}
       <div>
         <label htmlFor="reviewed-passage" className="text-xs font-medium text-zinc-600">Current / verified output</label>
         <textarea id="reviewed-passage" value={reviewedPassage} onChange={(event) => onPassageChange(event.target.value)} readOnly={!canReview} rows={3} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 read-only:bg-zinc-100" />
@@ -653,6 +685,153 @@ function SelectedReviewContext({
       )}
       {!canReview && <p className="text-xs leading-relaxed text-zinc-500">Specialist actions are unavailable for your role.</p>}
     </section>
+  );
+}
+
+function SourceEvidence({ provenance }: { provenance: TranscriptionProvenance | null }) {
+  const page = provenance?.pages[0];
+  if (!provenance || provenance.availability === "unavailable" || !page) {
+    return (
+      <p className="mt-3 text-xs leading-relaxed text-zinc-600">
+        Source-level provenance is unavailable for this OCR path.
+      </p>
+    );
+  }
+  const visibleCells = page.cells.slice(0, 50);
+
+  return (
+    <div className="mt-3 space-y-3 text-xs text-zinc-600">
+      <p className="rounded-md bg-caution-50 px-2.5 py-2 leading-relaxed text-caution-800">
+        Raw Braille and detected cells are page-level evidence only. No exact mapping to this English passage is available, and no source-image highlight has been generated.
+      </p>
+      <dl className="grid gap-2">
+        <div><dt className="font-medium text-zinc-500">Provenance source</dt><dd className="mt-0.5 text-zinc-700">{provenance.evidenceContract ?? "Provider-supplied raw Braille"}</dd></div>
+        <div><dt className="font-medium text-zinc-500">Provider / model</dt><dd className="mt-0.5 text-zinc-700">{[provenance.provider, provenance.model].filter(Boolean).join(" / ") || "Live transcription provider"}</dd></div>
+        <div><dt className="font-medium text-zinc-500">Mapping granularity</dt><dd className="mt-0.5 text-zinc-700">Unavailable: page evidence is not mapped to English offsets.</dd></div>
+      </dl>
+      {page.rawBraille && <EvidenceText label="Raw Braille (page-level)" value={page.rawBraille} />}
+      {page.cells.length > 0 && (
+        <details className="rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-2">
+          <summary className="cursor-pointer font-medium text-zinc-700">
+            Detected page cells ({page.cells.length}; not mapped to this passage)
+          </summary>
+          <ul className="mt-2 max-h-56 space-y-2 overflow-auto">
+            {visibleCells.map((cell) => (
+              <li key={cell.braivantaCellId} className="rounded-md bg-white px-2.5 py-2 leading-relaxed">
+                <span className="font-medium text-zinc-800">{cell.braivantaCellId}</span>
+                <span className="ml-1 text-zinc-400">provider ID: {cell.providerCellId ?? "not supplied"}</span>
+                <span className="mt-0.5 block">
+                  Line {cell.lineNumber}, cell {cell.cellIndex} · {cell.normalizedSymbol} · dots {cell.dotPattern.join("-")} · provider cell score {Math.round(cell.confidence * 100)}%
+                </span>
+                <span className="block text-zinc-400">
+                  Working-image box [{cell.boundingBox.left}, {cell.boundingBox.top}, {cell.boundingBox.right}, {cell.boundingBox.bottom}] px; not source-image aligned.
+                </span>
+              </li>
+            ))}
+          </ul>
+          {page.cells.length > visibleCells.length && (
+            <p className="mt-2 text-zinc-500">Showing the first {visibleCells.length} cells. The complete evidence remains in the persisted record.</p>
+          )}
+        </details>
+      )}
+    </div>
+  );
+}
+
+const standardsOutcomeLabels: Record<StandardRuleEvaluation["automatedOutcome"], string> = {
+  not_applicable: "Not applicable",
+  consistent: "Consistent with encoded rule",
+  possible_conflict: "Possible standards conflict",
+  insufficient_evidence: "Insufficient evidence",
+};
+
+function StandardsDecisionSupport({
+  evaluations,
+  canReview,
+  pending,
+  action,
+  reason,
+  onReasonChange,
+  onOverride,
+}: {
+  evaluations: StandardRuleEvaluation[];
+  canReview: boolean;
+  pending: boolean;
+  action: string | null;
+  reason: string;
+  onReasonChange: (value: string) => void;
+  onOverride: (ruleId: string, decision: StandardsOverrideDecision) => void;
+}) {
+  return (
+    <details className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+      <summary className="cursor-pointer text-sm font-medium text-zinc-700">Standards decision support</summary>
+      <div className="mt-3 space-y-3">
+        <p className="text-xs leading-relaxed text-zinc-600">
+          Bounded rule evidence only. This is not compliance certification; the qualified specialist remains authoritative.
+        </p>
+        {evaluations.map((evaluation) => {
+          const latestOverride = evaluation.overrides.at(-1);
+          const applicability = evaluation.applicability;
+          const displayOutcome =
+            applicability?.basis === "configured_workflow" &&
+            applicability.evidenceStatus === "supported"
+              ? evaluation.automatedOutcome
+              : "insufficient_evidence";
+          const prefix = `standards-${evaluation.ruleId}`;
+          return (
+            <section key={evaluation.ruleId} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3" aria-label={`${evaluation.ruleId} evaluation`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono text-[11px] font-semibold text-zinc-600">{evaluation.ruleId}</span>
+                <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-zinc-700">{standardsOutcomeLabels[displayOutcome]}</span>
+              </div>
+              <p className="mt-2 text-xs font-medium text-zinc-800">{evaluation.ruleTitle} · {evaluation.ruleVersion}</p>
+              <dl className="mt-2 grid gap-1.5 rounded-md bg-white px-2.5 py-2 text-xs leading-relaxed">
+                <div>
+                  <dt className="font-medium text-zinc-500">Evaluation context</dt>
+                  <dd className="text-zinc-700">
+                    {applicability?.context ?? "Applicability basis was not recorded for this historical evaluation."}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-zinc-500">Provider standards proof</dt>
+                  <dd className="text-zinc-700">
+                    Not established. Braivanta decision-support configuration is not provider/run provenance.
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-600">{evaluation.evidenceSummary}</p>
+              <a href={evaluation.sourceReference} target="_blank" rel="noreferrer" className="mt-2 inline-flex text-xs font-medium text-accent-700 hover:underline">Authoritative ICEB rule evidence</a>
+              {latestOverride && (
+                <p className="mt-2 rounded-md bg-white px-2.5 py-2 text-xs leading-relaxed text-zinc-600">
+                  Latest specialist decision: {latestOverride.decision.replaceAll("_", " ")} · {latestOverride.reason}
+                </p>
+              )}
+              {canReview && (
+                <div className="mt-3 space-y-2 border-t border-zinc-200 pt-3">
+                  <label htmlFor={`standards-reason-${evaluation.ruleId}`} className="text-xs font-medium text-zinc-600">Specialist decision reason</label>
+                  <textarea id={`standards-reason-${evaluation.ruleId}`} value={reason} onChange={(event) => onReasonChange(event.target.value)} rows={2} className="w-full rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-xs" />
+                  <div className="grid gap-2">
+                    {displayOutcome === "consistent" && (
+                      <button type="button" onClick={() => onOverride(evaluation.ruleId, "confirm_interpretation")} disabled={pending || !reason.trim()} className="h-8 rounded-md bg-zinc-900 px-2 text-xs font-medium text-white disabled:opacity-50">
+                        {action === `${prefix}-confirm_interpretation` ? "Saving…" : "Confirm interpretation"}
+                      </button>
+                    )}
+                    {displayOutcome === "possible_conflict" && (
+                      <button type="button" onClick={() => onOverride(evaluation.ruleId, "override_warning")} disabled={pending || !reason.trim()} className="h-8 rounded-md bg-zinc-900 px-2 text-xs font-medium text-white disabled:opacity-50">
+                        {action === `${prefix}-override_warning` ? "Saving…" : "Override warning"}
+                      </button>
+                    )}
+                    <button type="button" onClick={() => onOverride(evaluation.ruleId, "mark_not_applicable")} disabled={pending || !reason.trim()} className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs font-medium text-zinc-700 disabled:opacity-50">
+                      {action === `${prefix}-mark_not_applicable` ? "Saving…" : "Mark not applicable"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 

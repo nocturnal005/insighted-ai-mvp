@@ -10,8 +10,18 @@ import { hydrateBrailleTask, persistBrailleTask } from "@/lib/durable-braille";
 import { transcribeBraille, mapFlagsToLowConfidenceRegions, summariseFlags, toStoredFlags } from "@/lib/ai";
 import { assertVisionImageUpload } from "@/lib/upload-guard";
 import { generateFeedback } from "@/lib/feedback";
-import type { BrailleTask, TranscriptionReviewStatus } from "@/lib/types";
+import type {
+  BrailleTask,
+  StandardsOverrideDecision,
+  TranscriptionReviewStatus,
+} from "@/lib/types";
 import { closedTaskError, planReviewItemMutation } from "@/lib/verification/review-guards";
+import { buildTranscriptionProvenance } from "@/lib/provenance";
+import {
+  evaluateRegisteredStandards,
+  planStandardsOverride,
+  standardsApplicabilityForRun,
+} from "@/lib/standards/evaluation";
 import {
   buildTranscriptionReviewItems,
   buildUnmappedHighPriorityIssues,
@@ -110,6 +120,13 @@ async function executeTranscription(
   const regions = mapFlagsToLowConfidenceRegions(result.flags);
   const confidenceEvidence = storedConfidenceEvidence(result);
   const reviewItems = buildTranscriptionReviewItems(result);
+  const provenance = buildTranscriptionProvenance(result);
+  const standardsApplicability = standardsApplicabilityForRun(result);
+  const standardsEvaluations = evaluateRegisteredStandards(
+    provenance,
+    standardsApplicability,
+    result.meta.completedAt,
+  );
   task.transcription = {
     draftText: result.draftText,
     editedText: result.draftText,
@@ -152,6 +169,8 @@ async function executeTranscription(
           processingMs: result.review.processingMs,
         }
       : null,
+    provenance,
+    standardsEvaluations,
   };
   task.status = "needs_specialist_review";
   task.updatedAt = new Date().toISOString();
@@ -293,6 +312,49 @@ export async function reviewTranscriptionItem(
     previousStatus,
     newStatus: nextStatus,
     reason: item.reviewerNote || null,
+  });
+  await persistBrailleTask(task);
+  revalidatePath(`/braille/${taskId}`);
+}
+
+export async function recordStandardsOverride(
+  taskId: string,
+  ruleId: string,
+  decision: StandardsOverrideDecision,
+  reason: string,
+) {
+  const user = await requireUser();
+  if (!can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate })) {
+    throw new Error("Only authorised Braille specialists can record standards decisions");
+  }
+  const task = await hydrateBrailleTask(taskId);
+  const transcription = task?.transcription;
+  if (!task || !transcription) throw new Error("Nothing to review");
+
+  const reviewedAt = new Date().toISOString();
+  const plan = planStandardsOverride({
+    taskStatus: task.status,
+    transcriptionStatus: transcription.status,
+    evaluations: transcription.standardsEvaluations ?? [],
+    ruleId,
+    decision,
+    reviewerId: user.id,
+    reviewedAt,
+    reason,
+  });
+  if (!plan.ok) throw new Error(plan.error);
+
+  transcription.standardsEvaluations = plan.evaluations;
+  task.updatedAt = reviewedAt;
+  recordAudit({
+    actorId: user.id,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: `transcription.standards.${decision}`,
+    objectType: "Standards decision support",
+    objectLabel: task.title,
+    taskId: task.id,
+    reason: `${ruleId}: ${reason.trim()}`,
   });
   await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);

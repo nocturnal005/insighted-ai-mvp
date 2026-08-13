@@ -24,7 +24,12 @@ export default async function BrailleDetailPage(props: { params: Promise<{ id: s
   const up = getTaskUpload(task.id);
   const timeline = redactPrivateAuditProvenance(getTaskAudit(task.id));
   const privateProvenance = isPrivateProviderIdentity(task.transcription?.aiProvider);
-  const taskForDisplay = redactPrivateBrailleProvenance(task);
+  const canViewSourceEvidence = can(user.role, "transcription.specialist_verify", {
+    brailleLiterate: user.brailleLiterate,
+  });
+  const taskForDisplay = redactPrivateBrailleProvenance(task, {
+    includeSourceEvidence: canViewSourceEvidence,
+  });
   const upload = up
     ? {
         src: `/api/source/${encodeURIComponent(task.id)}?preview=1`,
@@ -74,7 +79,7 @@ export default async function BrailleDetailPage(props: { params: Promise<{ id: s
         privateProvenance={privateProvenance}
         permissions={{
           canEdit: can(user.role, "transcription.edit"),
-          canVerify: can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate }),
+          canVerify: canViewSourceEvidence,
           canFeedback: can(user.role, "feedback.generate"),
           canApproveFeedback: can(user.role, "feedback.approve"),
           canReject: can(user.role, "task.reject"),

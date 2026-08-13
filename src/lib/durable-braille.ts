@@ -1,11 +1,11 @@
 import { neon } from "@neondatabase/serverless";
-import { db, uploadDataUrl } from "@/lib/store";
-import type { AuditEntry, BrailleTask, CorrectionPair, Upload } from "@/lib/types";
+import { db, uploadDataUrl } from "./store.ts";
+import type { AuditEntry, BrailleTask, CorrectionPair, Upload } from "./types.ts";
 import {
   canReadDurableData,
   durableFetchOptions,
   markDurableReadUnavailable,
-} from "@/lib/durable-availability";
+} from "./durable-availability.ts";
 
 interface StoredBrailleTaskRow {
   task: BrailleTask | string;
