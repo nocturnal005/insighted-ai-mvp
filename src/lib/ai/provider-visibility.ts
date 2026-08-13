@@ -15,19 +15,41 @@ export function isPrivateProviderIdentity(provider?: string | null): boolean {
  * Create the Braille task view model that may safely cross the Server Component ->
  * Client Component boundary. The durable task remains unchanged.
  */
-export function redactPrivateBrailleProvenance(task: BrailleTask): BrailleTask {
+export function redactPrivateBrailleProvenance(
+  task: BrailleTask,
+  options: { includeSourceEvidence?: boolean } = {},
+): BrailleTask {
   const transcription = task.transcription;
-  if (!transcription || !isPrivateProviderIdentity(transcription.aiProvider)) return task;
+  if (!transcription) return task;
+
+  const includeSourceEvidence = options.includeSourceEvidence ?? true;
+  const privateIdentity = isPrivateProviderIdentity(transcription.aiProvider);
+  if (!privateIdentity && includeSourceEvidence) return task;
 
   return {
     ...task,
     transcription: {
       ...transcription,
-      aiProvider: null,
-      aiModel: null,
-      promptVersion: null,
-      aiRequestId: null,
-      review: transcription.review ? { ...transcription.review, model: null } : transcription.review,
+      ...(privateIdentity
+        ? {
+            aiProvider: null,
+            aiModel: null,
+            promptVersion: null,
+            aiRequestId: null,
+            review: transcription.review ? { ...transcription.review, model: null } : transcription.review,
+            provenance: transcription.provenance
+              ? {
+                  ...transcription.provenance,
+                  provider: null,
+                  model: null,
+                  engineVersion: null,
+                }
+              : transcription.provenance,
+          }
+        : {}),
+      ...(!includeSourceEvidence
+        ? { provenance: null, standardsEvaluations: null }
+        : {}),
     },
   };
 }

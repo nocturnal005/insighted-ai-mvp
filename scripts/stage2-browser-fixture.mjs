@@ -39,6 +39,11 @@ const engine = http.createServer((request, response) => {
     response.end(JSON.stringify({
       draftText,
       confidence: 0.72,
+      rawBraille: "⠼⠁ ⠓⠊",
+      rawCells: [
+        { line: 1, cellIndex: 1, dots: [3, 4, 5, 6], bbox: [10, 10, 22, 30], confidence: 0.76 },
+        { line: 1, cellIndex: 2, dots: [1], bbox: [26, 10, 38, 30], confidence: 0.81 },
+      ],
       providerRequestId: "stage2_browser_fixture",
       flags: [{
         text: flagText,

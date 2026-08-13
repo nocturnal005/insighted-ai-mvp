@@ -97,6 +97,101 @@ export interface TranscriptionConfidenceEvidence {
   providerSupplied: boolean;
 }
 
+export type ProvenanceAvailability = "partial" | "unavailable";
+
+/** Provider working-image coordinates. They are never treated as source-image coordinates. */
+export interface ProvenanceBoundingBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  unit: "pixel";
+  coordinateSpace: "provider_working_image";
+  sourceImageAligned: false;
+}
+
+export interface BrailleCellEvidence {
+  /** Braivanta-owned identifier; deliberately distinct from any provider identifier. */
+  braivantaCellId: string;
+  /** The current external contract supplies no stable provider cell identifier. */
+  providerCellId: string | null;
+  pageNumber: number | null;
+  lineNumber: number;
+  cellIndex: number;
+  dotPattern: number[];
+  normalizedSymbol: string;
+  confidence: number;
+  boundingBox: ProvenanceBoundingBox;
+  evidenceSource: "external_braille_ocr_contract_v1";
+}
+
+export interface BraillePageEvidence {
+  pageId: string;
+  pageNumber: number | null;
+  dimensions: null;
+  rawBraille: string | null;
+  cells: BrailleCellEvidence[];
+  /** Empty until a provider returns a semantically proven source-to-English mapping. */
+  mappings: [];
+  mappingAvailability: "unavailable";
+  sourceHighlightAvailability: "unavailable";
+  limitations: string[];
+}
+
+export interface StandardsProfile {
+  family: "UEB";
+  version: "Third Edition 2024";
+  sourceReference: string;
+  coverage: "bounded_rule_registry";
+  providerTable: null;
+}
+
+export interface TranscriptionProvenance {
+  version: "1";
+  availability: ProvenanceAvailability;
+  provider: string | null;
+  model: string | null;
+  engineVersion: string | null;
+  evidenceContract: string | null;
+  pages: BraillePageEvidence[];
+  standardsProfile: StandardsProfile;
+  limitations: string[];
+}
+
+export type StandardsEvaluationOutcome =
+  | "not_applicable"
+  | "consistent"
+  | "possible_conflict"
+  | "insufficient_evidence";
+
+export type StandardsOverrideDecision =
+  | "confirm_interpretation"
+  | "mark_not_applicable"
+  | "override_warning";
+
+export interface StandardsOverrideRecord {
+  decision: StandardsOverrideDecision;
+  reviewerId: string;
+  reviewedAt: string;
+  reason: string;
+}
+
+export interface StandardRuleEvaluation {
+  standardFamily: "UEB";
+  ruleId: string;
+  ruleVersion: string;
+  ruleTitle: string;
+  sourceReference: string;
+  automatedOutcome: StandardsEvaluationOutcome;
+  evaluatedAt: string;
+  evidenceSummary: string;
+  evidenceCellIds: string[];
+  implementationScope: string;
+  limitations: string[];
+  /** Append-only specialist decisions; the automated result above is never overwritten. */
+  overrides: StandardsOverrideRecord[];
+}
+
 export type BrailleReviewStatus = "completed" | "skipped" | "unavailable" | "failed";
 
 export type BrailleDiscrepancyType =
@@ -170,6 +265,10 @@ export interface Transcription {
   // Evidence retained from the hybrid pipeline; suggestions are never auto-applied.
   rawBraille?: string | null;
   review?: BrailleHybridReview | null;
+  /** Additive Stage 3 evidence; historical records may omit it. */
+  provenance?: TranscriptionProvenance | null;
+  /** Original automated standards outcomes plus append-only specialist decisions. */
+  standardsEvaluations?: StandardRuleEvaluation[] | null;
 }
 
 export interface FeedbackFindings {
