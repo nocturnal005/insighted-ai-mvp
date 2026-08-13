@@ -13,9 +13,14 @@ const ACTION_LABEL: Record<string, string> = {
   "ai.stem_description.run": "AI STEM description generated",
   "transcription.draft": "AI draft generated",
   "transcription.edit": "Transcription edited",
+  "transcription.correction.record": "Specialist correction evidence recorded",
+  "transcription.review_item.confirmed": "Specialist confirmed machine interpretation",
+  "transcription.review_item.corrected": "Specialist corrected transcription passage",
+  "transcription.review_item.needs_rescan": "Specialist requested a re-scan",
   "transcription.specialist_verify": "Specialist verification completed",
   "feedback.generate": "Teacher feedback drafted",
   "feedback.edit": "Feedback edited",
+  "feedback.subject_assess": "Teacher subject-content assessment recorded",
   "feedback.approve": "Teacher feedback approved",
   "visual.draft": "Visual description drafted",
   "visual.edit": "Visual description edited",
@@ -77,7 +82,7 @@ export function TaskTimeline({ entries }: { entries: AuditEntry[] }) {
                     <p className="mt-0.5 text-[11px] text-zinc-400">Flags: {entry.flagSummary.join(", ")}</p>
                   )}
                 </div>
-                <span className="shrink-0 text-xs text-zinc-400">{formatRelative(entry.createdAt)}</span>
+                <span suppressHydrationWarning className="shrink-0 text-xs text-zinc-400">{formatRelative(entry.createdAt)}</span>
               </li>
             ))}
           </ol>

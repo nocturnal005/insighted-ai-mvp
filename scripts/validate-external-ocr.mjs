@@ -571,7 +571,12 @@ async function main() {
     let wholeEditItem = wholeEditTask?.transcription?.reviewItems?.[0];
     check("confirm rejects unsaved passage text", wholeEditItem?.reviewStatus === "unreviewed" && wholeEditItem?.reviewedText === MOCK_FLAG_TEXT);
     const unflaggedEdit = MOCK_DRAFT.replace("stable words", "carefully checked stable words");
-    r = await qtvi.invoke(wholeEditPath, ids.saveTranscription, [wholeEditTaskId, unflaggedEdit]);
+    r = await qtvi.invoke(wholeEditPath, ids.saveTranscription, [
+      wholeEditTaskId,
+      unflaggedEdit,
+      "other",
+      "Controlled specialist whole-document correction.",
+    ]);
     wholeEditPage = await (await qtvi.get(wholeEditPath)).text();
     check("specialist can edit an unflagged whole-document passage", wholeEditPage.includes("carefully checked stable words"), `status=${r.status}`);
     check("contextual review remains mapped after whole-document edit", wholeEditPage.includes(`aria-label="Review required: ${MOCK_FLAG_TEXT}"`));
@@ -585,7 +590,12 @@ async function main() {
     check("whole-document edit preserves machine passage", wholeEditItem?.machineText === MOCK_FLAG_TEXT);
 
     const forbiddenFlagEdit = unflaggedEdit.replace(MOCK_FLAG_TEXT, "changed outside contextual control");
-    r = await qtvi.invoke(wholeEditPath, ids.saveTranscription, [wholeEditTaskId, forbiddenFlagEdit]);
+    r = await qtvi.invoke(wholeEditPath, ids.saveTranscription, [
+      wholeEditTaskId,
+      forbiddenFlagEdit,
+      "other",
+      "Controlled flagged-passage boundary check.",
+    ]);
     wholeEditPage = await (await qtvi.get(wholeEditPath)).text();
     wholeEditDb = JSON.parse(readFileSync(path.join(DATA_DIR, "db.json"), "utf8"));
     wholeEditTask = wholeEditDb.brailleTasks.find((task) => task.id === wholeEditTaskId);
@@ -650,7 +660,12 @@ async function main() {
     check("failure output still draft-gated", page.includes(DRAFT_WARNING));
     check("failure prompts retake or specialist transcription", page.includes(MANUAL_TRANSCRIPTION_WARNING));
     const specialistReplacement = "Specialist transcription entered directly from the source Braille.";
-    r = await qtvi.invoke(failPath, ids.saveTranscription, [failId, specialistReplacement]);
+    r = await qtvi.invoke(failPath, ids.saveTranscription, [
+      failId,
+      specialistReplacement,
+      "other",
+      "Specialist replacement after controlled provider failure.",
+    ]);
     page = await (await qtvi.get(failPath)).text();
     check("poor OCR draft can still be replaced with specialist transcription", page.includes(specialistReplacement), `status=${r.status}`);
 
