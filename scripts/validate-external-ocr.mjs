@@ -48,7 +48,6 @@ const CONTRACT_KEY = "test-contract-key"; // local throwaway value, never a real
 const MOCK_FLAG_TEXT = "uncertain phrase 9f3e";
 const MOCK_DRAFT = `stable words ${MOCK_FLAG_TEXT} ending`;
 const MOCK_FLAG_REASON = "MOCK-FLAG-REASON-7b21 synthetic uncertainty for guardrail";
-const REVIEW_ITEM_ID = `review-${MOCK_DRAFT.indexOf(MOCK_FLAG_TEXT)}-${MOCK_DRAFT.indexOf(MOCK_FLAG_TEXT) + MOCK_FLAG_TEXT.length}-0`;
 const CORRECTED_FLAG_TEXT = "verified phrase 9f3e";
 const RAW_BODY_MARKER = "RAW-PROVIDER-BODY-MARKER-9c4e";
 const VERIFIED_FLAG_TEXT = "checked phrase 9f3e";
@@ -77,6 +76,14 @@ function check(name, ok, detail = "") {
 
 function section(title) {
   console.log(`\n=== ${title} ===`);
+}
+
+function reviewItemIdForTask(taskId) {
+  const stored = JSON.parse(readFileSync(path.join(DATA_DIR, "db.json"), "utf8"));
+  const task = stored.brailleTasks.find((entry) => entry.id === taskId);
+  const reviewItemId = task?.transcription?.reviewItems?.[0]?.id;
+  if (!reviewItemId) throw new Error(`No persisted review item found for ${taskId}`);
+  return reviewItemId;
 }
 
 // ── Mock external Braille OCR engine ────────────────────────────────────────
@@ -374,7 +381,7 @@ async function main() {
 
     let r = await teacher.invoke(taskPath, ids.reviewTranscriptionItem, [
       taskId,
-      REVIEW_ITEM_ID,
+      reviewItemIdForTask(taskId),
       "corrected",
       "teacher bypass",
       "",
@@ -388,7 +395,7 @@ async function main() {
 
     r = await qtvi.invoke(taskPath, ids.reviewTranscriptionItem, [
       taskId,
-      REVIEW_ITEM_ID,
+      reviewItemIdForTask(taskId),
       "confirmed",
       MOCK_FLAG_TEXT,
       "Checked against the source.",
@@ -399,7 +406,7 @@ async function main() {
 
     await qtvi.invoke(taskPath, ids.reviewTranscriptionItem, [
       taskId,
-      REVIEW_ITEM_ID,
+      reviewItemIdForTask(taskId),
       "corrected",
       VERIFIED_FLAG_TEXT,
       "Final wording checked against the source.",
@@ -407,7 +414,7 @@ async function main() {
 
     r = await qtvi.invoke(taskPath, ids.reviewTranscriptionItem, [
       taskId,
-      REVIEW_ITEM_ID,
+      reviewItemIdForTask(taskId),
       "confirmed",
       VERIFIED_FLAG_TEXT,
       "Must remain corrected.",
@@ -512,7 +519,7 @@ async function main() {
 
     r = await qtvi.invoke(correctionPath, ids.reviewTranscriptionItem, [
       correctionTaskId,
-      REVIEW_ITEM_ID,
+      reviewItemIdForTask(correctionTaskId),
       "needs_rescan",
       MOCK_FLAG_TEXT,
       "Source capture needs another scan.",
@@ -526,7 +533,7 @@ async function main() {
 
     r = await qtvi.invoke(correctionPath, ids.reviewTranscriptionItem, [
       correctionTaskId,
-      REVIEW_ITEM_ID,
+      reviewItemIdForTask(correctionTaskId),
       "corrected",
       CORRECTED_FLAG_TEXT,
       "Corrected from the source Braille.",
@@ -561,7 +568,7 @@ async function main() {
     check("authorised editor retains progressive full-transcription control", wholeEditPage.includes("Edit full transcription"));
     await qtvi.invoke(wholeEditPath, ids.reviewTranscriptionItem, [
       wholeEditTaskId,
-      REVIEW_ITEM_ID,
+      reviewItemIdForTask(wholeEditTaskId),
       "confirmed",
       "unsaved passage edit",
       "Must not discard unsaved text",
@@ -631,7 +638,7 @@ async function main() {
       ]) {
         await qtvi.invoke(closedPath, ids.reviewTranscriptionItem, [
           closedTaskId,
-          REVIEW_ITEM_ID,
+          reviewItemIdForTask(closedTaskId),
           nextStatus,
           text,
           "Must be blocked after closure",

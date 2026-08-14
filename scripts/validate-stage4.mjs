@@ -48,6 +48,19 @@ const checks = [
   ["durable test preserves specialist evidence after teacher work", "tests/stage4-durable-persistence.test.ts", "protectedCorrections"],
   ["authority tests cover Braille-literate specialist without teacher approval", "tests/stage4-dual-assessment.test.ts", 'can("teaching_assistant", "feedback.approve"'],
   ["capability map states bounded evidence claims", "docs/stage-4-dual-assessment-capability-map.md", "Controlled tests establish software behaviour only"],
+  ["transcription run identity stays backward compatible", "src/lib/types.ts", "transcriptionRunId?: string | null"],
+  ["correction evidence can retain legacy unscoped records", "src/lib/types.ts", "transcriptionRunId?: string | null"],
+  ["run ids are Braivanta-owned", "src/lib/transcription-lineage.ts", "Braivanta-owned identity for one OCR/transcription execution"],
+  ["new OCR execution creates run identity", "src/app/(app)/braille/actions.ts", "const transcriptionRunId = createTranscriptionRunId()"],
+  ["review items are built with current run identity", "src/app/(app)/braille/actions.ts", "buildTranscriptionReviewItems(result, transcriptionRunId)"],
+  ["new transcription stores current run identity", "src/app/(app)/braille/actions.ts", "transcriptionRunId,"],
+  ["correction planner requires run identity", "src/lib/dual-assessment.ts", "Correction evidence requires a transcription run identity"],
+  ["review item ids are scoped by run", "src/lib/verification/confidence.ts", "reviewItemIdForRun(transcriptionRunId"],
+  ["UI partitions current and earlier run evidence", "src/app/(app)/braille/[id]/review-workflow.tsx", "partitionCorrectionEvidence(evidence, currentRunId)"],
+  ["UI labels earlier transcription evidence", "src/app/(app)/braille/[id]/review-workflow.tsx", "Previous transcription evidence"],
+  ["legacy evidence is explicitly unscoped", "src/app/(app)/braille/[id]/review-workflow.tsx", "transcription run not recorded"],
+  ["page evidence is not presented as correction mapping", "src/app/(app)/braille/[id]/review-workflow.tsx", "Page-level evidence available; not mapped to this correction"],
+  ["durable test preserves Run A through Run B", "tests/stage4-durable-persistence.test.ts", "trun_stage4_b"],
 ];
 
 const exclusions = [

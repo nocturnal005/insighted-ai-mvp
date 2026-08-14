@@ -48,6 +48,7 @@ const CORRECTION_ATTRIBUTIONS = [
 export interface SpecialistCorrectionRequest {
   id: string;
   taskId: string;
+  transcriptionRunId: string;
   reviewItemId: string | null;
   reviewStatus: Exclude<TranscriptionReviewStatus, "unreviewed">;
   source: SpecialistCorrectionSource | string;
@@ -76,6 +77,10 @@ export function planSpecialistCorrectionEvidence(
   request: SpecialistCorrectionRequest,
 ): SpecialistCorrectionPlan {
   if (request.reviewStatus !== "corrected") return { ok: true, evidence: null };
+  const transcriptionRunId = request.transcriptionRunId.trim();
+  if (!transcriptionRunId) {
+    return { ok: false, error: "Correction evidence requires a transcription run identity" };
+  }
   if (!SPECIALIST_CORRECTION_CATEGORIES.includes(request.evidenceCategory as SpecialistCorrectionCategory)) {
     return { ok: false, error: "Unknown specialist correction category" };
   }
@@ -103,6 +108,7 @@ export function planSpecialistCorrectionEvidence(
     evidence: {
       id: request.id,
       taskId: request.taskId,
+      transcriptionRunId,
       reviewItemId: request.reviewItemId,
       source: request.source as SpecialistCorrectionSource,
       changeType: "text_replacement",
@@ -125,6 +131,35 @@ export function correctionEvidenceState(
   evidence: readonly SpecialistCorrectionEvidence[] | null | undefined,
 ): "recorded" | "not recorded" {
   return evidence?.length ? "recorded" : "not recorded";
+}
+
+export type CorrectionEvidenceScope = "current_run" | "historical_run" | "legacy_unscoped";
+
+export function correctionEvidenceScope(
+  evidence: SpecialistCorrectionEvidence,
+  currentRunId: string | null | undefined,
+): CorrectionEvidenceScope {
+  const evidenceRunId = evidence.transcriptionRunId?.trim();
+  const activeRunId = currentRunId?.trim();
+  if (!evidenceRunId) return "legacy_unscoped";
+  if (activeRunId && evidenceRunId === activeRunId) return "current_run";
+  return "historical_run";
+}
+
+export function partitionCorrectionEvidence(
+  evidence: readonly SpecialistCorrectionEvidence[] | null | undefined,
+  currentRunId: string | null | undefined,
+) {
+  const current: SpecialistCorrectionEvidence[] = [];
+  const historical: SpecialistCorrectionEvidence[] = [];
+  const legacy: SpecialistCorrectionEvidence[] = [];
+  for (const entry of evidence ?? []) {
+    const scope = correctionEvidenceScope(entry, currentRunId);
+    if (scope === "current_run") current.push(entry);
+    else if (scope === "historical_run") historical.push(entry);
+    else legacy.push(entry);
+  }
+  return { current, historical, legacy };
 }
 
 export interface TeacherSubjectAssessmentInput {

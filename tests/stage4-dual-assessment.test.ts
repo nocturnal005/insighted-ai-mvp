@@ -7,7 +7,13 @@ import {
   planSpecialistCorrectionEvidence,
   planTeacherSubjectAssessment,
   teacherVerifiedTranscriptionError,
+  partitionCorrectionEvidence,
 } from "../src/lib/dual-assessment.ts";
+import { createTranscriptionRunId } from "../src/lib/transcription-lineage.ts";
+import {
+  remapReviewItemsAfterWholeDocumentEdit,
+  reviewItemIdForRun,
+} from "../src/lib/verification/confidence.ts";
 import { can } from "../src/lib/rbac.ts";
 import type {
   BrailleTask,
@@ -77,6 +83,7 @@ function task(verified = true): BrailleTask {
     assignedTo: null,
     uploadId: null,
     transcription: {
+      transcriptionRunId: "trun_controlled_a",
       draftText: "The woter cycle.",
       editedText: verified ? "The water cycle." : "The woter cycle.",
       finalText: verified ? "The water cycle." : null,
@@ -106,6 +113,7 @@ function correction(overrides: Record<string, unknown> = {}) {
   return planSpecialistCorrectionEvidence({
     id: "sce_1",
     taskId: "bt_stage4_controlled",
+    transcriptionRunId: "trun_controlled_a",
     reviewItemId: "tri_1",
     reviewStatus: "corrected",
     source: "flagged_passage",
@@ -147,6 +155,7 @@ test("S4-3: corrected passage produces structured evidence with immutable machin
   assert.equal(plan.evidence.previousText, "woter");
   assert.equal(plan.evidence.reviewedText, "water");
   assert.equal(plan.evidence.evidenceCategory, "word_interpretation");
+  assert.equal(plan.evidence.transcriptionRunId, "trun_controlled_a");
   assert.equal(plan.evidence.reviewerId, "u_specialist");
   assert.equal(plan.evidence.reviewedAt, at);
   assert.equal(plan.evidence.reviewerReason, "Checked the passage against the source evidence.");
@@ -187,6 +196,7 @@ test("S4-7: whole-document unflagged correction is represented without fabricati
   assert.equal(plan.ok, true);
   if (!plan.ok || !plan.evidence) return;
   assert.equal(plan.evidence.source, "whole_document_edit");
+  assert.equal(plan.evidence.transcriptionRunId, "trun_controlled_a");
   assert.equal(plan.evidence.machineText, null);
   assert.equal(plan.evidence.attribution, "unknown");
 });
@@ -288,4 +298,74 @@ test("S4-15: specialist correction planning never silently creates teacher feedb
   const plan = correction();
   assert.equal(plan.ok, true);
   assert.equal(controlledTask.feedback, null);
+});
+
+test("S4-16: Braivanta transcription run ids are unique and independent of provider ids", () => {
+  const first = createTranscriptionRunId();
+  const second = createTranscriptionRunId();
+  assert.match(first, /^trun_[0-9a-f-]+$/);
+  assert.match(second, /^trun_[0-9a-f-]+$/);
+  assert.notEqual(first, second);
+  assert.notEqual(first, "provider-request-123");
+});
+
+test("S4-17: review-item ids cannot collide across transcription runs with identical offsets", () => {
+  const runA = reviewItemIdForRun("trun_a", 10, 15, 0);
+  const runB = reviewItemIdForRun("trun_b", 10, 15, 0);
+  assert.notEqual(runA, runB);
+  assert.match(runA, /^review-trun_a-10-15-0$/);
+  assert.match(runB, /^review-trun_b-10-15-0$/);
+});
+
+test("S4-18: safe whole-document remapping keeps review identity stable inside one run", () => {
+  const id = reviewItemIdForRun("trun_a", 3, 8, 0);
+  const [remapped] = remapReviewItemsAfterWholeDocumentEdit(
+    "xx alpha yy",
+    "long xx alpha yy",
+    [{
+      id,
+      transcriptionRunId: "trun_a",
+      start: 3,
+      end: 8,
+      machineText: "alpha",
+      reviewedText: "alpha",
+      uncertaintyState: "review_required",
+      reviewStatus: "unreviewed",
+      category: "word",
+      severity: "high",
+      reason: "Controlled fixture.",
+      evidenceSource: "ocr_provider_flag",
+      confidence: null,
+      confidenceSource: null,
+      alternativeText: null,
+      reviewerNote: "",
+      reviewedBy: null,
+      reviewedAt: null,
+    }],
+  );
+  assert.equal(remapped.id, id);
+  assert.equal(remapped.transcriptionRunId, "trun_a");
+  assert.equal(remapped.start, 8);
+  assert.equal(remapped.end, 13);
+});
+
+test("S4-19: current, earlier-run, and legacy-unscoped corrections partition deterministically", () => {
+  const current = correction();
+  const earlier = correction({ id: "sce_old", transcriptionRunId: "trun_controlled_old" });
+  assert.equal(current.ok && earlier.ok, true);
+  if (!current.ok || !earlier.ok || !current.evidence || !earlier.evidence) return;
+  const legacy = { ...earlier.evidence, id: "sce_legacy", transcriptionRunId: null };
+  const partition = partitionCorrectionEvidence(
+    [earlier.evidence, legacy, current.evidence],
+    "trun_controlled_a",
+  );
+  assert.deepEqual(partition.current.map((entry) => entry.id), ["sce_1"]);
+  assert.deepEqual(partition.historical.map((entry) => entry.id), ["sce_old"]);
+  assert.deepEqual(partition.legacy.map((entry) => entry.id), ["sce_legacy"]);
+});
+
+test("S4-20: a new correction cannot be recorded without a transcription run identity", () => {
+  const plan = correction({ transcriptionRunId: "" });
+  assert.equal(plan.ok, false);
+  if (!plan.ok) assert.match(plan.error, /transcription run identity/);
 });

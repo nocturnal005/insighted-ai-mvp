@@ -96,6 +96,8 @@ export type SpecialistCorrectionAttribution =
 export interface SpecialistCorrectionEvidence {
   id: string;
   taskId: string;
+  /** Braivanta-owned OCR/transcription execution identity; absent on legacy evidence. */
+  transcriptionRunId?: string | null;
   reviewItemId: string | null;
   source: SpecialistCorrectionSource;
   changeType: "text_replacement";
@@ -116,6 +118,8 @@ export interface SpecialistCorrectionEvidence {
 /** Passage-level uncertainty that can be mapped exactly onto visible translated text. */
 export interface TranscriptionReviewItem {
   id: string;
+  /** Braivanta-owned run scope; absent on review items created before run lineage existed. */
+  transcriptionRunId?: string | null;
   start: number;
   end: number;
   machineText: string;
@@ -281,6 +285,8 @@ export interface BrailleHybridReview {
 }
 
 export interface Transcription {
+  /** Braivanta-owned identity for this OCR/transcription execution; absent on legacy records. */
+  transcriptionRunId?: string | null;
   draftText: string;
   editedText: string;
   finalText: string | null;

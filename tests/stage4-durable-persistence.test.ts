@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 
 import { neonConfig } from "@neondatabase/serverless";
 import type { BrailleTask, SpecialistCorrectionEvidence } from "../src/lib/types.ts";
+import { reviewItemIdForRun } from "../src/lib/verification/confidence.ts";
 
 interface DurableRow {
   task: BrailleTask;
@@ -61,11 +62,12 @@ test("S4-D1: production persistence/hydration preserves specialist correction th
   try {
     const { db } = await import("../src/lib/store.ts");
     const { persistBrailleTask, hydrateBrailleTask } = await import("../src/lib/durable-braille.ts");
-    const { planTeacherSubjectAssessment } = await import("../src/lib/dual-assessment.ts");
+    const { partitionCorrectionEvidence, planTeacherSubjectAssessment } = await import("../src/lib/dual-assessment.ts");
     const correction: SpecialistCorrectionEvidence = {
       id: "sce_stage4_durable",
       taskId: "bt_stage4_durable",
-      reviewItemId: "tri_stage4",
+      transcriptionRunId: "trun_stage4_a",
+      reviewItemId: reviewItemIdForRun("trun_stage4_a", 10, 15, 0),
       source: "flagged_passage",
       changeType: "text_replacement",
       machineText: "woter",
@@ -91,6 +93,7 @@ test("S4-D1: production persistence/hydration preserves specialist correction th
       assignedTo: "u_teacher",
       uploadId: null,
       transcription: {
+        transcriptionRunId: "trun_stage4_a",
         draftText: "The woter cycle.",
         editedText: "The water cycle.",
         finalText: "The water cycle.",
@@ -153,19 +156,59 @@ test("S4-D1: production persistence/hydration preserves specialist correction th
       updatedAt: "2026-08-13T14:02:00.000Z",
     };
 
-    const protectedMachine = task.transcription!.draftText;
-    const protectedProvenance = structuredClone(task.transcription!.provenance);
-    const protectedStandards = structuredClone(task.transcription!.standardsEvaluations);
-    const protectedCorrections = structuredClone(task.transcription!.specialistCorrectionEvidence);
-
     db.brailleTasks.unshift(task);
     await persistBrailleTask(task);
     db.brailleTasks = db.brailleTasks.filter((item) => item.id !== task.id);
     const correctionReload = await hydrateBrailleTask(task.id);
     assert.deepEqual(correctionReload?.transcription?.specialistCorrectionEvidence, [correction]);
+    assert.equal(correctionReload?.transcription?.transcriptionRunId, "trun_stage4_a");
+
+    const runB = "trun_stage4_b";
+    const correctionB: SpecialistCorrectionEvidence = {
+      ...correction,
+      id: "sce_stage4_durable_b",
+      transcriptionRunId: runB,
+      reviewItemId: reviewItemIdForRun(runB, 10, 15, 0),
+      machineText: "watur",
+      previousText: "watur",
+      reviewedText: "water",
+      reviewerReason: "Controlled specialist check on the second transcription run.",
+      reviewedAt: "2026-08-13T14:02:30.000Z",
+    };
+    correctionReload!.transcription!.transcriptionRunId = runB;
+    correctionReload!.transcription!.draftText = "The watur cycle.";
+    correctionReload!.transcription!.editedText = "The water cycle.";
+    correctionReload!.transcription!.finalText = "The water cycle.";
+    correctionReload!.transcription!.provenance = {
+      ...correctionReload!.transcription!.provenance!,
+      model: "controlled-model-b",
+    };
+    correctionReload!.transcription!.specialistCorrectionEvidence = [correction, correctionB];
+    await persistBrailleTask(correctionReload!);
+    db.brailleTasks = db.brailleTasks.filter((item) => item.id !== task.id);
+    const rerunReload = await hydrateBrailleTask(task.id);
+    assert.equal(rerunReload?.transcription?.transcriptionRunId, runB);
+    assert.equal(rerunReload?.transcription?.specialistCorrectionEvidence?.[0].transcriptionRunId, "trun_stage4_a");
+    assert.equal(rerunReload?.transcription?.specialistCorrectionEvidence?.[1].transcriptionRunId, runB);
+    assert.notEqual(
+      rerunReload?.transcription?.specialistCorrectionEvidence?.[0].reviewItemId,
+      rerunReload?.transcription?.specialistCorrectionEvidence?.[1].reviewItemId,
+    );
+    const rerunEvidence = partitionCorrectionEvidence(
+      rerunReload?.transcription?.specialistCorrectionEvidence,
+      rerunReload?.transcription?.transcriptionRunId,
+    );
+    assert.deepEqual(rerunEvidence.current.map((entry) => entry.id), [correctionB.id]);
+    assert.deepEqual(rerunEvidence.historical.map((entry) => entry.id), [correction.id]);
+    assert.deepEqual(rerunEvidence.legacy, []);
+
+    const protectedMachine = rerunReload!.transcription!.draftText;
+    const protectedProvenance = structuredClone(rerunReload!.transcription!.provenance);
+    const protectedStandards = structuredClone(rerunReload!.transcription!.standardsEvaluations);
+    const protectedCorrections = structuredClone(rerunReload!.transcription!.specialistCorrectionEvidence);
 
     const assessmentPlan = planTeacherSubjectAssessment({
-      task: correctionReload!,
+      task: rerunReload!,
       canAssess: true,
       teacherId: "u_teacher",
       assessedAt: "2026-08-13T14:03:00.000Z",
@@ -177,9 +220,9 @@ test("S4-D1: production persistence/hydration preserves specialist correction th
       },
     });
     if (!assessmentPlan.ok) throw new Error(assessmentPlan.error);
-    correctionReload!.feedback = assessmentPlan.feedback;
-    correctionReload!.updatedAt = assessmentPlan.assessment.assessedAt;
-    await persistBrailleTask(correctionReload!);
+    rerunReload!.feedback = assessmentPlan.feedback;
+    rerunReload!.updatedAt = assessmentPlan.assessment.assessedAt;
+    await persistBrailleTask(rerunReload!);
     db.brailleTasks = db.brailleTasks.filter((item) => item.id !== task.id);
     const assessmentReload = await hydrateBrailleTask(task.id);
 
@@ -188,6 +231,12 @@ test("S4-D1: production persistence/hydration preserves specialist correction th
     assert.deepEqual(assessmentReload?.transcription?.provenance, protectedProvenance);
     assert.deepEqual(assessmentReload?.transcription?.standardsEvaluations, protectedStandards);
     assert.deepEqual(assessmentReload?.transcription?.specialistCorrectionEvidence, protectedCorrections);
+    const assessmentEvidence = partitionCorrectionEvidence(
+      assessmentReload?.transcription?.specialistCorrectionEvidence,
+      assessmentReload?.transcription?.transcriptionRunId,
+    );
+    assert.deepEqual(assessmentEvidence.current.map((entry) => entry.id), [correctionB.id]);
+    assert.deepEqual(assessmentEvidence.historical.map((entry) => entry.id), [correction.id]);
   } finally {
     neonConfig.fetchFunction = priorFetchFunction;
     if (priorDatabaseUrl === undefined) delete process.env.DATABASE_URL;

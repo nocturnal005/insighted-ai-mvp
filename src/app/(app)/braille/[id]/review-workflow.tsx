@@ -36,6 +36,7 @@ import {
   SPECIALIST_CORRECTION_CATEGORIES,
   SUBJECT_CONTENT_COMPLETENESS,
   correctionEvidenceState,
+  partitionCorrectionEvidence,
 } from "@/lib/dual-assessment";
 
 interface Perms {
@@ -144,7 +145,11 @@ export function ReviewWorkflow({
     setReviewerNote(item.reviewerNote);
     const latestEvidence = [...(t?.specialistCorrectionEvidence ?? [])]
       .reverse()
-      .find((evidence) => evidence.reviewItemId === item.id);
+      .find(
+        (evidence) =>
+          evidence.reviewItemId === item.id &&
+          (!t?.transcriptionRunId || evidence.transcriptionRunId === t.transcriptionRunId),
+      );
     setCorrectionCategory(latestEvidence?.evidenceCategory ?? "other");
   }
 
@@ -514,7 +519,10 @@ export function ReviewWorkflow({
               )}
 
               {t && permissions.canVerify && (
-                <CorrectionEvidencePanel evidence={t.specialistCorrectionEvidence} />
+                <CorrectionEvidencePanel
+                  evidence={t.specialistCorrectionEvidence}
+                  currentRunId={t.transcriptionRunId ?? null}
+                />
               )}
 
               {!ended && t && !verified && (t.standardsEvaluations ?? []).length > 0 && (
@@ -852,8 +860,10 @@ function CorrectionClassificationFields({
 
 function CorrectionEvidencePanel({
   evidence,
+  currentRunId,
 }: {
   evidence: SpecialistCorrectionEvidence[] | null | undefined;
+  currentRunId: string | null;
 }) {
   if (correctionEvidenceState(evidence) === "not recorded") {
     return (
@@ -863,28 +873,77 @@ function CorrectionEvidencePanel({
     );
   }
 
+  const { current, historical, legacy } = partitionCorrectionEvidence(evidence, currentRunId);
+  const previous = [...historical, ...legacy];
+
   return (
-    <details className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
-      <summary className="cursor-pointer text-sm font-medium text-zinc-700">Correction evidence ({evidence!.length})</summary>
-      <div className="mt-3 space-y-3">
-        <p className="text-xs leading-relaxed text-zinc-500">Append-only specialist evidence of changes to machine/current transcription. It is not a learner-proficiency judgement.</p>
-        {[...evidence!].reverse().map((entry) => (
-          <section key={entry.id} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3" aria-label={`Correction evidence ${entry.evidenceCategory}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-zinc-800">{correctionCategoryLabel(entry.evidenceCategory)}</span>
-              <span className="text-[11px] text-zinc-500">{entry.source.replaceAll("_", " ")}</span>
+    <div className="space-y-3">
+      {current.length > 0 ? (
+        <details className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-zinc-700">Correction evidence ({current.length})</summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-xs leading-relaxed text-zinc-500">Current transcription-run evidence only. These records describe specialist changes to the transcription. It is not a learner-proficiency judgement or attribution of fault.</p>
+            <CorrectionEvidenceEntries entries={current} currentRun />
+          </div>
+        </details>
+      ) : (
+        <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600">
+          <span className="font-medium text-zinc-700">Current-run correction evidence:</span> not recorded
+        </div>
+      )}
+
+      {previous.length > 0 && (
+        <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-zinc-700">Previous transcription evidence ({previous.length})</summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-xs leading-relaxed text-zinc-500">Earlier-run evidence is retained for audit but is not treated as evidence for the current machine transcription. Records created before run lineage remain explicitly unscoped.</p>
+            <CorrectionEvidenceEntries entries={previous} currentRun={false} />
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function CorrectionEvidenceEntries({
+  entries,
+  currentRun,
+}: {
+  entries: SpecialistCorrectionEvidence[];
+  currentRun: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      {[...entries].reverse().map((entry) => (
+        <section key={entry.id} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3" aria-label={`Correction evidence ${entry.evidenceCategory}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-zinc-800">{correctionCategoryLabel(entry.evidenceCategory)}</span>
+            <span className="text-[11px] text-zinc-500">
+              {entry.transcriptionRunId
+                ? currentRun
+                  ? "Current transcription run"
+                  : "Earlier transcription run"
+                : "Historical evidence — transcription run not recorded"}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-500">{entry.source.replaceAll("_", " ")}</p>
+          <dl className="mt-2 space-y-2 text-xs">
+            <div><dt className="font-medium text-zinc-500">Machine text</dt><dd className="mt-0.5 rounded-md bg-white px-2 py-1.5 text-zinc-700">{entry.machineText ?? "Not mapped for this whole-document change"}</dd></div>
+            <div><dt className="font-medium text-zinc-500">Previous / verified text</dt><dd className="mt-0.5 rounded-md bg-white px-2 py-1.5 text-zinc-700">{entry.previousText} → {entry.reviewedText}</dd></div>
+            <div><dt className="font-medium text-zinc-500">Specialist reason</dt><dd className="mt-0.5 text-zinc-700">{entry.reviewerReason}</dd></div>
+            <div><dt className="font-medium text-zinc-500">Attribution</dt><dd className="mt-0.5 text-zinc-700">{entry.attribution === "unknown" ? "Unknown / not attributed" : entry.attribution.replaceAll("_", " ")}</dd></div>
+            <div>
+              <dt className="font-medium text-zinc-500">Source evidence</dt>
+              <dd className="mt-0.5 text-zinc-700">
+                {entry.sourceEvidenceAvailability === "partial"
+                  ? "Page-level evidence available; not mapped to this correction"
+                  : "Unavailable"}
+              </dd>
             </div>
-            <dl className="mt-2 space-y-2 text-xs">
-              <div><dt className="font-medium text-zinc-500">Machine text</dt><dd className="mt-0.5 rounded-md bg-white px-2 py-1.5 text-zinc-700">{entry.machineText ?? "Not mapped for this whole-document change"}</dd></div>
-              <div><dt className="font-medium text-zinc-500">Previous / verified text</dt><dd className="mt-0.5 rounded-md bg-white px-2 py-1.5 text-zinc-700">{entry.previousText} → {entry.reviewedText}</dd></div>
-              <div><dt className="font-medium text-zinc-500">Specialist reason</dt><dd className="mt-0.5 text-zinc-700">{entry.reviewerReason}</dd></div>
-              <div><dt className="font-medium text-zinc-500">Attribution</dt><dd className="mt-0.5 text-zinc-700">{entry.attribution === "unknown" ? "Unknown / not attributed" : entry.attribution.replaceAll("_", " ")}</dd></div>
-              <div><dt className="font-medium text-zinc-500">Source evidence</dt><dd className="mt-0.5 text-zinc-700">{entry.sourceEvidenceAvailability}</dd></div>
-            </dl>
-          </section>
-        ))}
-      </div>
-    </details>
+          </dl>
+        </section>
+      ))}
+    </div>
   );
 }
 

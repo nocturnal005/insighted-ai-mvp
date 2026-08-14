@@ -36,6 +36,7 @@ import {
   storedConfidenceEvidence,
   unresolvedRequiredReviewItems,
 } from "@/lib/verification/confidence";
+import { createTranscriptionRunId } from "@/lib/transcription-lineage";
 
 export async function createBrailleTask(formData: FormData) {
   const user = await requireUser();
@@ -107,6 +108,7 @@ async function executeTranscription(
 ) {
   const previousStatus = task.status;
   const priorSpecialistCorrectionEvidence = task.transcription?.specialistCorrectionEvidence ?? [];
+  const transcriptionRunId = createTranscriptionRunId();
 
   // Feed the uploaded image (as a data URL) into the AI/OCR service — never just the title.
   const upload = getTaskUpload(task.id);
@@ -127,7 +129,7 @@ async function executeTranscription(
 
   const regions = mapFlagsToLowConfidenceRegions(result.flags);
   const confidenceEvidence = storedConfidenceEvidence(result);
-  const reviewItems = buildTranscriptionReviewItems(result);
+  const reviewItems = buildTranscriptionReviewItems(result, transcriptionRunId);
   const provenance = buildTranscriptionProvenance(result);
   const standardsApplicability = standardsApplicabilityForRun(result);
   const standardsEvaluations = evaluateRegisteredStandards(
@@ -136,6 +138,7 @@ async function executeTranscription(
     result.meta.completedAt,
   );
   task.transcription = {
+    transcriptionRunId,
     draftText: result.draftText,
     editedText: result.draftText,
     finalText: null,
@@ -271,6 +274,7 @@ export async function saveTranscription(
     const evidencePlan = planSpecialistCorrectionEvidence({
       id: id("sce"),
       taskId: task.id,
+      transcriptionRunId: task.transcription.transcriptionRunId ?? "",
       reviewItemId: null,
       reviewStatus: "corrected",
       source: "whole_document_edit",
@@ -359,6 +363,7 @@ export async function reviewTranscriptionItem(
   const evidencePlan = planSpecialistCorrectionEvidence({
     id: id("sce"),
     taskId: task.id,
+    transcriptionRunId: transcription.transcriptionRunId ?? "",
     reviewItemId: item.id,
     reviewStatus: nextStatus,
     source: "flagged_passage",

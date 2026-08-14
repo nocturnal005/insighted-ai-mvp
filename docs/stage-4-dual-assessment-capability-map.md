@@ -29,6 +29,12 @@ Specialist actions continue to require `transcription.specialist_verify`. Teache
 
 Source/provider evidence remains server-redacted for users without specialist evidence permission. Stage 4 correction records do not copy raw provider payloads or provider identity into teacher assessment.
 
+## Transcription-run lineage
+
+Every new OCR/transcription execution receives a Braivanta-owned `transcriptionRunId`. The identifier is internal workflow evidence, not a provider request ID and not proof of provider behaviour. New review-item IDs are scoped to that run, and each new `SpecialistCorrectionEvidence` record carries the run it corrected. OCR reruns retain earlier specialist corrections append-only, but the review UI separates current-run evidence from earlier-run evidence. Historical records created before this capability remain valid with no run ID and are shown as unscoped; Braivanta does not infer a missing run from offsets, matching text, provider metadata, or timestamps.
+
+`partial` source provenance remains page-level evidence unless an exact source-to-English mapping is actually supported. Stage 4 therefore labels partial evidence as page-level and not mapped to the individual correction; no correction-level source mapping or highlight is invented.
+
 ## Persistence and audit
 
 Both optional Stage 4 structures live in the existing complete `BrailleTask` JSONB record and pass through `persistBrailleTask()` / `hydrateBrailleTask()`. No destructive migration or historical backfill is performed. Missing historical evidence renders as `not recorded`; no classification is guessed from final text.
