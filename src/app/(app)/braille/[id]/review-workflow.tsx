@@ -17,8 +17,11 @@ import type {
   AuditEntry,
   BrailleHybridReview,
   BrailleTask,
+  SpecialistCorrectionCategory,
+  SpecialistCorrectionEvidence,
   StandardRuleEvaluation,
   StandardsOverrideDecision,
+  SubjectContentCompleteness,
   TranscriptionConfidenceEvidence,
   TranscriptionProvenance,
   TranscriptionReviewItem,
@@ -26,9 +29,15 @@ import type {
 } from "@/lib/types";
 import {
   runTranscription, rerunBrailleTranscription, saveTranscription, verifyTranscription,
-  createFeedback, saveFeedback, approveFeedback, rejectBrailleTask, archiveBrailleTask,
+  createFeedback, saveFeedback, saveSubjectAssessment, approveFeedback, rejectBrailleTask, archiveBrailleTask,
   reviewTranscriptionItem, recordStandardsOverride,
 } from "../actions";
+import {
+  SPECIALIST_CORRECTION_CATEGORIES,
+  SUBJECT_CONTENT_COMPLETENESS,
+  correctionEvidenceState,
+  partitionCorrectionEvidence,
+} from "@/lib/dual-assessment";
 
 interface Perms {
   canEdit: boolean; canVerify: boolean; canFeedback: boolean;
@@ -96,7 +105,14 @@ export function ReviewWorkflow({
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [reviewedPassage, setReviewedPassage] = useState("");
   const [reviewerNote, setReviewerNote] = useState("");
+  const [correctionCategory, setCorrectionCategory] = useState<SpecialistCorrectionCategory>("other");
+  const [wholeCorrectionCategory, setWholeCorrectionCategory] = useState<SpecialistCorrectionCategory>("other");
+  const [wholeCorrectionReason, setWholeCorrectionReason] = useState("");
   const [standardsReason, setStandardsReason] = useState("");
+  const [assessmentStrengths, setAssessmentStrengths] = useState<string | null>(null);
+  const [assessmentMisconceptions, setAssessmentMisconceptions] = useState<string | null>(null);
+  const [assessmentCompleteness, setAssessmentCompleteness] = useState<SubjectContentCompleteness | null>(null);
+  const [assessmentReasoning, setAssessmentReasoning] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [action, setAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +122,15 @@ export function ReviewWorkflow({
   const transcriptValue = text ?? t?.editedText ?? "";
   const commentsValue = comments ?? fb?.teacherComments ?? "";
   const learnerValue = learner ?? fb?.learnerSummary ?? "";
+  const subjectAssessment = fb?.subjectAssessment ?? null;
+  const assessmentStrengthsValue = assessmentStrengths ?? subjectAssessment?.strengths ?? "";
+  const assessmentMisconceptionsValue = assessmentMisconceptions ?? subjectAssessment?.misconceptions ?? "";
+  const assessmentCompletenessValue = assessmentCompleteness ?? subjectAssessment?.completeness ?? "not_recorded";
+  const assessmentReasoningValue = assessmentReasoning ?? subjectAssessment?.reasoning ?? "";
   const feedbackApprovalBlocked = !commentsValue.trim() || !learnerValue.trim();
+  const wholeCorrectionBlocked = Boolean(
+    permissions.canVerify && t && transcriptValue !== t.editedText && !wholeCorrectionReason.trim(),
+  );
   const currentStage: SubmissionStage = !t ? 1 : !verified ? 2 : 3;
   const selectedReviewItem = reviewItems.find((item) => item.id === selectedReviewId) ?? null;
   const unresolvedRequiredCount = reviewItems.filter(
@@ -119,6 +143,14 @@ export function ReviewWorkflow({
     setSelectedReviewId(item.id);
     setReviewedPassage(item.reviewedText);
     setReviewerNote(item.reviewerNote);
+    const latestEvidence = [...(t?.specialistCorrectionEvidence ?? [])]
+      .reverse()
+      .find(
+        (evidence) =>
+          evidence.reviewItemId === item.id &&
+          (!t?.transcriptionRunId || evidence.transcriptionRunId === t.transcriptionRunId),
+      );
+    setCorrectionCategory(latestEvidence?.evidenceCategory ?? "other");
   }
 
   function reviewItem(nextStatus: Exclude<TranscriptionReviewStatus, "unreviewed">) {
@@ -130,6 +162,7 @@ export function ReviewWorkflow({
         nextStatus,
         reviewedPassage,
         reviewerNote,
+        correctionCategory,
       );
       setText(null);
     });
@@ -144,8 +177,29 @@ export function ReviewWorkflow({
 
   function saveWholeTranscription() {
     run("save", async () => {
-      await saveTranscription(task.id, transcriptValue);
+      await saveTranscription(
+        task.id,
+        transcriptValue,
+        permissions.canVerify ? wholeCorrectionCategory : undefined,
+        permissions.canVerify ? wholeCorrectionReason : "",
+      );
       setText(null);
+      setWholeCorrectionReason("");
+    });
+  }
+
+  function saveAssessment() {
+    run("save-assessment", async () => {
+      await saveSubjectAssessment(task.id, {
+        strengths: assessmentStrengthsValue,
+        misconceptions: assessmentMisconceptionsValue,
+        completeness: assessmentCompletenessValue,
+        reasoning: assessmentReasoningValue,
+      });
+      setAssessmentStrengths(null);
+      setAssessmentMisconceptions(null);
+      setAssessmentCompleteness(null);
+      setAssessmentReasoning(null);
     });
   }
 
@@ -268,6 +322,17 @@ export function ReviewWorkflow({
                       No passage-level uncertainty evidence was supplied or could be mapped safely to this text. Whole-document specialist verification still applies.
                     </p>
                   )}
+                  {!verified && reviewItems.length === 0 && permissions.canVerify && transcriptValue !== t.editedText && (
+                    <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                      <CorrectionClassificationFields
+                        idPrefix="whole-primary"
+                        category={wholeCorrectionCategory}
+                        reason={wholeCorrectionReason}
+                        onCategoryChange={setWholeCorrectionCategory}
+                        onReasonChange={setWholeCorrectionReason}
+                      />
+                    </div>
+                  )}
                 </div>
                 {!verified && reviewItems.length > 0 && permissions.canEdit && (
                   <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 py-3">
@@ -284,7 +349,16 @@ export function ReviewWorkflow({
                         rows={12}
                         className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-4 text-base leading-7 text-zinc-900 focus:border-accent-500"
                       />
-                      <button type="button" onClick={saveWholeTranscription} disabled={pending} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">
+                      {permissions.canVerify && transcriptValue !== t.editedText && (
+                        <CorrectionClassificationFields
+                          idPrefix="whole-progressive"
+                          category={wholeCorrectionCategory}
+                          reason={wholeCorrectionReason}
+                          onCategoryChange={setWholeCorrectionCategory}
+                          onReasonChange={setWholeCorrectionReason}
+                        />
+                      )}
+                      <button type="button" onClick={saveWholeTranscription} disabled={pending || wholeCorrectionBlocked} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">
                         {action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save full transcription edits
                       </button>
                     </div>
@@ -342,10 +416,10 @@ export function ReviewWorkflow({
             </Card>
           )}
 
-          <section id="assess-feedback" aria-labelledby="assessment-feedback-heading">
+          <section id="assess-feedback" aria-labelledby="assessment-feedback-heading" data-stage1-label="Assessment & feedback">
             <Card>
               <CardHeader>
-                <CardTitle id="assessment-feedback-heading">Assessment & feedback</CardTitle>
+                <CardTitle id="assessment-feedback-heading">Subject-content assessment & feedback</CardTitle>
                 {fb && <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${fbApproved ? "bg-positive-50 text-positive-700" : "bg-caution-50 text-caution-700"}`}>{fbApproved ? "Staff-approved" : "Draft · editable"}</span>}
               </CardHeader>
               <CardBody>
@@ -354,16 +428,58 @@ export function ReviewWorkflow({
                     <Lock className="h-4 w-4 shrink-0" /> Assessment and feedback unlock after specialist verification.
                   </div>
                 ) : !fb ? (
-                  <div className="flex min-h-28 items-center gap-3 rounded-xl bg-zinc-50 px-4 py-4 text-sm text-zinc-600">
-                    <FileText className="h-4 w-4 shrink-0" /> The verified translation is ready for subject feedback. Use the action panel to create the draft.
+                  <div className="space-y-3">
+                    <div role="status" className="flex items-center gap-2 rounded-xl bg-positive-50 px-3.5 py-3 text-sm font-medium text-positive-700"><ShieldCheck className="h-4 w-4" /> Specialist-verified transcription</div>
+                    <div className="flex min-h-20 items-center gap-3 rounded-xl bg-zinc-50 px-4 py-4 text-sm text-zinc-600">
+                      <FileText className="h-4 w-4 shrink-0" /> The verified English transcription is ready for subject-content assessment and feedback. You are not being asked to judge Braille accuracy.
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    <div role="status" className="flex items-center gap-2 rounded-xl bg-positive-50 px-3.5 py-3 text-sm font-medium text-positive-700"><ShieldCheck className="h-4 w-4" /> Specialist-verified transcription</div>
                     <div className="flex items-start gap-2.5 rounded-xl bg-accent-50/60 px-3.5 py-3 text-sm text-accent-700"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><span>This feedback is based on the specialist-verified English transcription. It does not verify Braille accuracy.</span></div>
                     <p className="text-sm text-zinc-700">{fb.summary}</p>
                     <Findings title="Specialist transcription notes" items={[fb.specialistNotes].filter(Boolean)} />
                     <Findings title="Specialist review items" items={[...fb.findings.contractions, ...fb.findings.formatting, ...fb.findings.unclear]} />
                     <Findings title="Subject teacher feedback prompts" items={fb.findings.spelling} />
+                    <section aria-labelledby="subject-assessment-heading" className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
+                      <h3 id="subject-assessment-heading" className="text-sm font-semibold text-zinc-900">Teacher subject-content assessment</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-zinc-500">Human educational judgement only. No automated grade, attainment band, or Braille-proficiency claim is produced.</p>
+                      {permissions.canApproveFeedback && !fbApproved ? (
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label htmlFor="assessment-strengths" className="text-xs font-medium text-zinc-600">Subject-content strengths</label>
+                            <textarea id="assessment-strengths" value={assessmentStrengthsValue} onChange={(event) => setAssessmentStrengths(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800" />
+                          </div>
+                          <div>
+                            <label htmlFor="assessment-misconceptions" className="text-xs font-medium text-zinc-600">Misconceptions / inaccuracies</label>
+                            <textarea id="assessment-misconceptions" value={assessmentMisconceptionsValue} onChange={(event) => setAssessmentMisconceptions(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800" />
+                          </div>
+                          <div>
+                            <label htmlFor="assessment-completeness" className="text-xs font-medium text-zinc-600">Content completeness</label>
+                            <select id="assessment-completeness" value={assessmentCompletenessValue} onChange={(event) => setAssessmentCompleteness(event.target.value as SubjectContentCompleteness)} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800">
+                              {SUBJECT_CONTENT_COMPLETENESS.map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label htmlFor="assessment-reasoning" className="text-xs font-medium text-zinc-600">Reasoning / explanation</label>
+                            <textarea id="assessment-reasoning" value={assessmentReasoningValue} onChange={(event) => setAssessmentReasoning(event.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800" />
+                          </div>
+                          <button type="button" onClick={saveAssessment} disabled={pending} className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 disabled:opacity-50 sm:col-span-2">
+                            {action === "save-assessment" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save subject assessment
+                          </button>
+                        </div>
+                      ) : subjectAssessment ? (
+                        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                          <SummaryItem label="Strengths" value={subjectAssessment.strengths || "Not recorded"} />
+                          <SummaryItem label="Misconceptions / inaccuracies" value={subjectAssessment.misconceptions || "Not recorded"} />
+                          <SummaryItem label="Completeness" value={subjectAssessment.completeness.replaceAll("_", " ")} />
+                          <SummaryItem label="Reasoning / explanation" value={subjectAssessment.reasoning || "Not recorded"} />
+                        </dl>
+                      ) : (
+                        <p className="mt-3 text-sm text-zinc-600">Structured subject-content assessment: not recorded</p>
+                      )}
+                    </section>
                     <div>
                       <label htmlFor="comments" className="mb-1.5 block text-sm font-medium text-zinc-700">Subject teacher feedback {!fbApproved && <span className="text-xs font-normal text-zinc-400">(edit before approving)</span>}</label>
                       <textarea id="comments" value={commentsValue} onChange={(e) => setComments(e.target.value)} readOnly={fbApproved} rows={4} className="w-full rounded-lg border border-zinc-200 px-3.5 py-3 text-sm leading-relaxed text-zinc-800 read-only:bg-zinc-50 focus:border-accent-500" />
@@ -389,6 +505,7 @@ export function ReviewWorkflow({
                   item={selectedReviewItem}
                   reviewedPassage={reviewedPassage}
                   reviewerNote={reviewerNote}
+                  correctionCategory={correctionCategory}
                   canReview={permissions.canVerify}
                   pending={pending}
                   action={action}
@@ -396,7 +513,15 @@ export function ReviewWorkflow({
                   provenance={t.provenance ?? null}
                   onPassageChange={setReviewedPassage}
                   onNoteChange={setReviewerNote}
+                  onCategoryChange={setCorrectionCategory}
                   onReview={reviewItem}
+                />
+              )}
+
+              {t && permissions.canVerify && (
+                <CorrectionEvidencePanel
+                  evidence={t.specialistCorrectionEvidence}
+                  currentRunId={t.transcriptionRunId ?? null}
                 />
               )}
 
@@ -430,7 +555,7 @@ export function ReviewWorkflow({
                     </button>
                   )}
                   {permissions.canEdit && reviewItems.length === 0 && (
-                    <button onClick={saveWholeTranscription} disabled={pending} className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{needsSpecialistTranscription ? "Save specialist transcription" : "Save edits"}</button>
+                    <button onClick={saveWholeTranscription} disabled={pending || wholeCorrectionBlocked} className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-3.5 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">{action === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{needsSpecialistTranscription ? "Save specialist transcription" : "Save edits"}</button>
                   )}
                   {permissions.canVerify ? (
                     <button onClick={() => run("verify", () => verifyTranscription(task.id, transcriptValue, specialistNotes))} disabled={pending || mockDraft || transcriptValue.trim().length === 0 || unresolvedRequiredCount > 0} title={mockDraft ? "Run live transcription before specialist verification" : unresolvedRequiredCount > 0 ? "Resolve every required-review passage before final verification" : undefined} className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-zinc-900 px-3.5 text-[13px] font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{action === "verify" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Specialist verify</button>
@@ -595,6 +720,7 @@ function SelectedReviewContext({
   item,
   reviewedPassage,
   reviewerNote,
+  correctionCategory,
   canReview,
   pending,
   action,
@@ -602,11 +728,13 @@ function SelectedReviewContext({
   provenance,
   onPassageChange,
   onNoteChange,
+  onCategoryChange,
   onReview,
 }: {
   item: TranscriptionReviewItem | null;
   reviewedPassage: string;
   reviewerNote: string;
+  correctionCategory: SpecialistCorrectionCategory;
   canReview: boolean;
   pending: boolean;
   action: string | null;
@@ -614,6 +742,7 @@ function SelectedReviewContext({
   provenance: TranscriptionProvenance | null;
   onPassageChange: (value: string) => void;
   onNoteChange: (value: string) => void;
+  onCategoryChange: (value: SpecialistCorrectionCategory) => void;
   onReview: (status: Exclude<TranscriptionReviewStatus, "unreviewed">) => void;
 }) {
   if (!item) {
@@ -673,18 +802,148 @@ function SelectedReviewContext({
       {canReview && (
         <>
           <div>
-            <label htmlFor="reviewer-note" className="text-xs font-medium text-zinc-600">Reviewer note <span className="font-normal text-zinc-400">(optional)</span></label>
+            <label htmlFor="correction-category" className="text-xs font-medium text-zinc-600">Correction category</label>
+            <select id="correction-category" value={correctionCategory} onChange={(event) => onCategoryChange(event.target.value as SpecialistCorrectionCategory)} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800">
+              {SPECIALIST_CORRECTION_CATEGORIES.map((category) => <option key={category} value={category}>{correctionCategoryLabel(category)}</option>)}
+            </select>
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">Describes the transcription change, not learner ability or fault.</p>
+          </div>
+          <div>
+            <label htmlFor="reviewer-note" className="text-xs font-medium text-zinc-600">Specialist reason <span className="font-normal text-zinc-400">(required for a correction)</span></label>
             <textarea id="reviewer-note" value={reviewerNote} onChange={(event) => onNoteChange(event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800" />
           </div>
           <div className="grid gap-2">
             <button type="button" onClick={() => onReview("confirmed")} disabled={confirmBlocked} title={reviewedPassage !== item.reviewedText ? "Save or discard the pending passage edit before confirming" : item.reviewedText !== item.machineText ? "Restore and save the original machine text before confirming" : undefined} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-3 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{action === "review-confirmed" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Confirm machine interpretation</button>
-            <button type="button" onClick={() => onReview("corrected")} disabled={pending || !reviewedPassage.trim()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 disabled:opacity-50">{action === "review-corrected" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}Save corrected translation</button>
+            <button type="button" onClick={() => onReview("corrected")} disabled={pending || !reviewedPassage.trim() || reviewedPassage === item.reviewedText || !reviewerNote.trim()} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 disabled:opacity-50">{action === "review-corrected" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}Save corrected translation</button>
             <button type="button" onClick={() => onReview("needs_rescan")} disabled={pending} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-critical-200 bg-white px-3 text-xs font-medium text-critical-700 disabled:opacity-50">{action === "review-needs_rescan" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Needs re-scan</button>
           </div>
         </>
       )}
       {!canReview && <p className="text-xs leading-relaxed text-zinc-500">Specialist actions are unavailable for your role.</p>}
     </section>
+  );
+}
+
+function correctionCategoryLabel(category: SpecialistCorrectionCategory): string {
+  return category.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function CorrectionClassificationFields({
+  idPrefix,
+  category,
+  reason,
+  onCategoryChange,
+  onReasonChange,
+}: {
+  idPrefix: string;
+  category: SpecialistCorrectionCategory;
+  reason: string;
+  onCategoryChange: (value: SpecialistCorrectionCategory) => void;
+  onReasonChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div>
+        <label htmlFor={`${idPrefix}-category`} className="text-xs font-medium text-zinc-600">Correction category</label>
+        <select id={`${idPrefix}-category`} value={category} onChange={(event) => onCategoryChange(event.target.value as SpecialistCorrectionCategory)} className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-xs text-zinc-800">
+          {SPECIALIST_CORRECTION_CATEGORIES.map((value) => <option key={value} value={value}>{correctionCategoryLabel(value)}</option>)}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-reason`} className="text-xs font-medium text-zinc-600">Specialist reason</label>
+        <input id={`${idPrefix}-reason`} value={reason} onChange={(event) => onReasonChange(event.target.value)} className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-2.5 py-2 text-xs text-zinc-800" placeholder="Why this transcription change was needed" />
+      </div>
+      <p className="text-[11px] leading-relaxed text-zinc-500 sm:col-span-2">This records a change to the transcription. Causal attribution remains unknown unless a specialist records supported context.</p>
+    </div>
+  );
+}
+
+function CorrectionEvidencePanel({
+  evidence,
+  currentRunId,
+}: {
+  evidence: SpecialistCorrectionEvidence[] | null | undefined;
+  currentRunId: string | null;
+}) {
+  if (correctionEvidenceState(evidence) === "not recorded") {
+    return (
+      <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600">
+        <span className="font-medium text-zinc-700">Correction evidence:</span> not recorded
+      </div>
+    );
+  }
+
+  const { current, historical, legacy } = partitionCorrectionEvidence(evidence, currentRunId);
+  const previous = [...historical, ...legacy];
+
+  return (
+    <div className="space-y-3">
+      {current.length > 0 ? (
+        <details className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-zinc-700">Correction evidence ({current.length})</summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-xs leading-relaxed text-zinc-500">Current transcription-run evidence only. These records describe specialist changes to the transcription. It is not a learner-proficiency judgement or attribution of fault.</p>
+            <CorrectionEvidenceEntries entries={current} currentRun />
+          </div>
+        </details>
+      ) : (
+        <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-600">
+          <span className="font-medium text-zinc-700">Current-run correction evidence:</span> not recorded
+        </div>
+      )}
+
+      {previous.length > 0 && (
+        <details className="rounded-xl border border-zinc-200 bg-zinc-50/60 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-zinc-700">Previous transcription evidence ({previous.length})</summary>
+          <div className="mt-3 space-y-3">
+            <p className="text-xs leading-relaxed text-zinc-500">Earlier-run evidence is retained for audit but is not treated as evidence for the current machine transcription. Records created before run lineage remain explicitly unscoped.</p>
+            <CorrectionEvidenceEntries entries={previous} currentRun={false} />
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function CorrectionEvidenceEntries({
+  entries,
+  currentRun,
+}: {
+  entries: SpecialistCorrectionEvidence[];
+  currentRun: boolean;
+}) {
+  return (
+    <div className="space-y-3">
+      {[...entries].reverse().map((entry) => (
+        <section key={entry.id} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3" aria-label={`Correction evidence ${entry.evidenceCategory}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-zinc-800">{correctionCategoryLabel(entry.evidenceCategory)}</span>
+            <span className="text-[11px] text-zinc-500">
+              {entry.transcriptionRunId
+                ? currentRun
+                  ? "Current transcription run"
+                  : "Earlier transcription run"
+                : "Historical evidence — transcription run not recorded"}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-500">{entry.source.replaceAll("_", " ")}</p>
+          <dl className="mt-2 space-y-2 text-xs">
+            <div><dt className="font-medium text-zinc-500">Machine text</dt><dd className="mt-0.5 rounded-md bg-white px-2 py-1.5 text-zinc-700">{entry.machineText ?? "Not mapped for this whole-document change"}</dd></div>
+            <div><dt className="font-medium text-zinc-500">Previous / verified text</dt><dd className="mt-0.5 rounded-md bg-white px-2 py-1.5 text-zinc-700">{entry.previousText} → {entry.reviewedText}</dd></div>
+            <div><dt className="font-medium text-zinc-500">Specialist reason</dt><dd className="mt-0.5 text-zinc-700">{entry.reviewerReason}</dd></div>
+            <div><dt className="font-medium text-zinc-500">Attribution</dt><dd className="mt-0.5 text-zinc-700">{entry.attribution === "unknown" ? "Unknown / not attributed" : entry.attribution.replaceAll("_", " ")}</dd></div>
+            <div>
+              <dt className="font-medium text-zinc-500">Source evidence</dt>
+              <dd className="mt-0.5 text-zinc-700">
+                {entry.sourceEvidenceAvailability === "partial"
+                  ? "Page-level evidence available; not mapped to this correction"
+                  : "Unavailable"}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      ))}
+    </div>
   );
 }
 

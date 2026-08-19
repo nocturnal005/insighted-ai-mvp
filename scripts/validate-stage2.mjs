@@ -22,7 +22,7 @@ const checks = [
   ["general vision confidence withheld", "src/lib/ai/providers/openai-vision-provider.ts", "self-rating is not accepted"],
   ["mock confidence withheld", "src/lib/ai/providers/mock-provider.ts", 'source: "Deterministic demo fixture"'],
   ["engine comparison is labelled agreement", "src/lib/ai/providers/hybrid-braille-provider.ts", 'kind: "engine_agreement"'],
-  ["review items persist with transcription", "src/app/(app)/braille/actions.ts", "const reviewItems = buildTranscriptionReviewItems(result)"],
+  ["review items persist with transcription-run scope", "src/app/(app)/braille/actions.ts", "const reviewItems = buildTranscriptionReviewItems(result, transcriptionRunId)"],
   ["unmappable high-priority issues persist", "src/app/(app)/braille/actions.ts", "buildUnmappedHighPriorityIssues(result)"],
   ["whole-document edits remap marked passages", "src/app/(app)/braille/actions.ts", "remapReviewItemsAfterWholeDocumentEdit"],
   ["specialist permission guards passage actions", "src/app/(app)/braille/actions.ts", "Only authorised Braille specialists can review flagged passages"],

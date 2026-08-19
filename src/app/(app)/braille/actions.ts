@@ -12,9 +12,16 @@ import { assertVisionImageUpload } from "@/lib/upload-guard";
 import { generateFeedback } from "@/lib/feedback";
 import type {
   BrailleTask,
+  SpecialistCorrectionCategory,
   StandardsOverrideDecision,
   TranscriptionReviewStatus,
 } from "@/lib/types";
+import {
+  planSpecialistCorrectionEvidence,
+  planTeacherSubjectAssessment,
+  teacherVerifiedTranscriptionError,
+  type TeacherSubjectAssessmentInput,
+} from "@/lib/dual-assessment";
 import { closedTaskError, planReviewItemMutation } from "@/lib/verification/review-guards";
 import { buildTranscriptionProvenance } from "@/lib/provenance";
 import {
@@ -29,6 +36,7 @@ import {
   storedConfidenceEvidence,
   unresolvedRequiredReviewItems,
 } from "@/lib/verification/confidence";
+import { createTranscriptionRunId } from "@/lib/transcription-lineage";
 
 export async function createBrailleTask(formData: FormData) {
   const user = await requireUser();
@@ -99,6 +107,8 @@ async function executeTranscription(
   reason?: string,
 ) {
   const previousStatus = task.status;
+  const priorSpecialistCorrectionEvidence = task.transcription?.specialistCorrectionEvidence ?? [];
+  const transcriptionRunId = createTranscriptionRunId();
 
   // Feed the uploaded image (as a data URL) into the AI/OCR service — never just the title.
   const upload = getTaskUpload(task.id);
@@ -119,7 +129,7 @@ async function executeTranscription(
 
   const regions = mapFlagsToLowConfidenceRegions(result.flags);
   const confidenceEvidence = storedConfidenceEvidence(result);
-  const reviewItems = buildTranscriptionReviewItems(result);
+  const reviewItems = buildTranscriptionReviewItems(result, transcriptionRunId);
   const provenance = buildTranscriptionProvenance(result);
   const standardsApplicability = standardsApplicabilityForRun(result);
   const standardsEvaluations = evaluateRegisteredStandards(
@@ -128,6 +138,7 @@ async function executeTranscription(
     result.meta.completedAt,
   );
   task.transcription = {
+    transcriptionRunId,
     draftText: result.draftText,
     editedText: result.draftText,
     finalText: null,
@@ -171,6 +182,7 @@ async function executeTranscription(
       : null,
     provenance,
     standardsEvaluations,
+    specialistCorrectionEvidence: priorSpecialistCorrectionEvidence,
   };
   task.status = "needs_specialist_review";
   task.updatedAt = new Date().toISOString();
@@ -226,7 +238,12 @@ export async function rerunBrailleTranscription(taskId: string) {
   await executeTranscription(user, task, reason);
 }
 
-export async function saveTranscription(taskId: string, editedText: string) {
+export async function saveTranscription(
+  taskId: string,
+  editedText: string,
+  evidenceCategory?: SpecialistCorrectionCategory | string,
+  reviewerReason = "",
+) {
   const user = await requireUser();
   if (!can(user.role, "transcription.edit")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
@@ -234,25 +251,69 @@ export async function saveTranscription(taskId: string, editedText: string) {
   const closed = closedTaskError(task.status);
   if (closed) throw new Error(closed);
   if (task.transcription.status === "specialist_verified") throw new Error("Already verified and locked");
+  const previousText = task.transcription.editedText;
+  const changed = editedText !== previousText;
+  const canRecordSpecialistEvidence = can(user.role, "transcription.specialist_verify", {
+    brailleLiterate: user.brailleLiterate,
+  });
+  if ((evidenceCategory || reviewerReason.trim()) && !canRecordSpecialistEvidence) {
+    throw new Error("Only authorised Braille specialists can record correction evidence");
+  }
   const reviewItems = task.transcription.reviewItems ?? [];
+  let remappedItems = reviewItems;
   if (reviewItems.length > 0) {
-    task.transcription.reviewItems = remapReviewItemsAfterWholeDocumentEdit(
-      task.transcription.editedText,
+    remappedItems = remapReviewItemsAfterWholeDocumentEdit(
+      previousText,
       editedText,
       reviewItems,
     );
   }
 
+  let specialistEvidence = null;
+  if (changed && canRecordSpecialistEvidence) {
+    const evidencePlan = planSpecialistCorrectionEvidence({
+      id: id("sce"),
+      taskId: task.id,
+      transcriptionRunId: task.transcription.transcriptionRunId ?? "",
+      reviewItemId: null,
+      reviewStatus: "corrected",
+      source: "whole_document_edit",
+      machineText: null,
+      previousText,
+      reviewedText: editedText,
+      evidenceCategory: evidenceCategory ?? "other",
+      attribution: "unknown",
+      reviewerId: user.id,
+      reviewedAt: new Date().toISOString(),
+      reviewerReason,
+      sourceEvidenceAvailability: task.transcription.provenance?.availability ?? "unavailable",
+      relatedStandardRuleIds: [],
+      uncertaintyState: null,
+    });
+    if (!evidencePlan.ok) throw new Error(evidencePlan.error);
+    specialistEvidence = evidencePlan.evidence;
+  }
+
+  task.transcription.reviewItems = remappedItems;
   task.transcription.editedText = editedText;
+  if (specialistEvidence) {
+    task.transcription.specialistCorrectionEvidence = [
+      ...(task.transcription.specialistCorrectionEvidence ?? []),
+      specialistEvidence,
+    ];
+  }
   task.updatedAt = new Date().toISOString();
   recordAudit({
     actorId: user.id,
     actorName: user.fullName,
     actorRole: user.role,
-    action: "transcription.edit",
+    action: specialistEvidence ? "transcription.correction.record" : "transcription.edit",
     objectType: "Braille review",
     objectLabel: task.title,
     taskId: task.id,
+    reason: specialistEvidence
+      ? `${specialistEvidence.evidenceCategory}: ${specialistEvidence.reviewerReason}`
+      : null,
   });
   await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
@@ -264,6 +325,7 @@ export async function reviewTranscriptionItem(
   nextStatus: Exclude<TranscriptionReviewStatus, "unreviewed">,
   reviewedText: string,
   reviewerNote = "",
+  evidenceCategory: SpecialistCorrectionCategory | string = "other",
 ) {
   const user = await requireUser();
   if (!can(user.role, "transcription.specialist_verify", { brailleLiterate: user.brailleLiterate })) {
@@ -295,10 +357,38 @@ export async function reviewTranscriptionItem(
   });
   if (!plan.ok) throw new Error(plan.error);
 
+  const previousStatus = plan.previousStatus;
+  const previousItem = (transcription.reviewItems ?? []).find((candidate) => candidate.id === itemId)!;
+  const item = plan.items.find((candidate) => candidate.id === itemId)!;
+  const evidencePlan = planSpecialistCorrectionEvidence({
+    id: id("sce"),
+    taskId: task.id,
+    transcriptionRunId: transcription.transcriptionRunId ?? "",
+    reviewItemId: item.id,
+    reviewStatus: nextStatus,
+    source: "flagged_passage",
+    machineText: item.machineText,
+    previousText: previousItem.reviewedText,
+    reviewedText: item.reviewedText,
+    evidenceCategory,
+    attribution: "unknown",
+    reviewerId: user.id,
+    reviewedAt,
+    reviewerReason: reviewerNote,
+    sourceEvidenceAvailability: transcription.provenance?.availability ?? "unavailable",
+    relatedStandardRuleIds: [],
+    uncertaintyState: item.uncertaintyState,
+  });
+  if (!evidencePlan.ok) throw new Error(evidencePlan.error);
+
   transcription.editedText = plan.editedText;
   transcription.reviewItems = plan.items;
-  const previousStatus = plan.previousStatus;
-  const item = plan.items.find((candidate) => candidate.id === itemId)!;
+  if (evidencePlan.evidence) {
+    transcription.specialistCorrectionEvidence = [
+      ...(transcription.specialistCorrectionEvidence ?? []),
+      evidencePlan.evidence,
+    ];
+  }
   task.updatedAt = reviewedAt;
 
   recordAudit({
@@ -311,7 +401,9 @@ export async function reviewTranscriptionItem(
     taskId: task.id,
     previousStatus,
     newStatus: nextStatus,
-    reason: item.reviewerNote || null,
+    reason: evidencePlan.evidence
+      ? `${evidencePlan.evidence.evidenceCategory}: ${evidencePlan.evidence.reviewerReason}`
+      : item.reviewerNote || null,
   });
   await persistBrailleTask(task);
   revalidatePath(`/braille/${taskId}`);
@@ -421,16 +513,23 @@ export async function createFeedback(taskId: string) {
   const user = await requireUser();
   if (!can(user.role, "feedback.generate")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
-  if (!task?.transcription || task.transcription.status !== "specialist_verified" || !task.transcription.finalText) {
-    throw new Error("Specialist verification is required before teacher feedback");
+  if (!task) throw new Error("Task not found");
+  const gateError = teacherVerifiedTranscriptionError(task);
+  if (gateError) {
+    throw new Error(
+      gateError.includes("Specialist verification")
+        ? "Specialist verification is required before teacher feedback"
+        : gateError,
+    );
   }
+  const transcription = task.transcription!;
 
   const previousStatus = task.status;
-  const d = generateFeedback(task.transcription.finalText);
+  const d = generateFeedback(transcription.finalText!);
   task.feedback = {
     summary: d.summary,
     findings: d.findings,
-    specialistNotes: task.transcription.specialistNotes,
+    specialistNotes: transcription.specialistNotes,
     subjectFeedback: d.teacherComments,
     teacherComments: d.teacherComments,
     learnerSummary: d.learnerSummary,
@@ -442,6 +541,7 @@ export async function createFeedback(taskId: string) {
     teacherReviewedBy: null,
     teacherReviewedAt: null,
     createdAt: new Date().toISOString(),
+    subjectAssessment: null,
   };
   task.status = "teacher_review";
   task.updatedAt = new Date().toISOString();
@@ -466,6 +566,8 @@ export async function saveFeedback(taskId: string, teacherComments: string, lear
   if (!can(user.role, "feedback.generate")) throw new Error("Not permitted");
   const task = await hydrateBrailleTask(taskId);
   if (!task?.feedback) throw new Error("No feedback to edit");
+  const gateError = teacherVerifiedTranscriptionError(task);
+  if (gateError) throw new Error(gateError);
   if (task.feedback.status === "approved") throw new Error("Feedback already approved and locked");
 
   task.feedback.teacherComments = teacherComments;
@@ -485,12 +587,49 @@ export async function saveFeedback(taskId: string, teacherComments: string, lear
   revalidatePath(`/braille/${taskId}`);
 }
 
+/** Record teacher-owned subject-content judgement without touching specialist evidence. */
+export async function saveSubjectAssessment(
+  taskId: string,
+  input: TeacherSubjectAssessmentInput,
+) {
+  const user = await requireUser();
+  const canAssess = can(user.role, "feedback.approve");
+  const task = await hydrateBrailleTask(taskId);
+  if (!task) throw new Error("Task not found");
+  const assessedAt = new Date().toISOString();
+  const plan = planTeacherSubjectAssessment({
+    task,
+    canAssess,
+    teacherId: user.id,
+    assessedAt,
+    input,
+  });
+  if (!plan.ok) throw new Error(plan.error);
+
+  task.feedback = plan.feedback;
+  task.updatedAt = assessedAt;
+  recordAudit({
+    actorId: user.id,
+    actorName: user.fullName,
+    actorRole: user.role,
+    action: "feedback.subject_assess",
+    objectType: "Subject-content assessment",
+    objectLabel: task.title,
+    taskId: task.id,
+    reason: `completeness: ${plan.assessment.completeness}`,
+  });
+  await persistBrailleTask(task);
+  revalidatePath(`/braille/${taskId}`);
+}
+
 /** Approve the feedback report — required before it can be exported. */
 export async function approveFeedback(taskId: string, teacherComments?: string, learnerSummary?: string) {
   const user = await requireUser();
   if (!can(user.role, "feedback.approve")) throw new Error("Only a teacher or QTVI can approve");
   const task = await hydrateBrailleTask(taskId);
   if (!task?.feedback) throw new Error("No feedback to approve");
+  const gateError = teacherVerifiedTranscriptionError(task);
+  if (gateError) throw new Error(gateError);
   const reviewedComments = String(teacherComments ?? task.feedback.teacherComments).trim();
   const reviewedSummary = String(learnerSummary ?? task.feedback.learnerSummary).trim();
   if (!reviewedComments || !reviewedSummary) {

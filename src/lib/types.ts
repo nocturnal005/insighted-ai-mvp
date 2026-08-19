@@ -66,9 +66,60 @@ export interface StoredAiFlag {
 export type TranscriptionReviewStatus = "unreviewed" | "confirmed" | "corrected" | "needs_rescan";
 export type TranscriptionUncertaintyState = "review_suggested" | "review_required";
 
+export type SpecialistCorrectionCategory =
+  | "character"
+  | "contraction"
+  | "number_indicator"
+  | "capitalisation"
+  | "punctuation"
+  | "spacing"
+  | "formatting"
+  | "word_interpretation"
+  | "source_unclear"
+  | "other";
+
+export type SpecialistCorrectionSource =
+  | "flagged_passage"
+  | "whole_document_edit"
+  | "specialist_manual_review";
+
+export type SpecialistCorrectionAttribution =
+  | "machine_interpretation"
+  | "source_ambiguity"
+  | "braille_usage"
+  | "unknown";
+
+/**
+ * Append-only evidence of a specialist change to the machine/current transcription.
+ * This describes a review action; it is never a claim about learner proficiency or fault.
+ */
+export interface SpecialistCorrectionEvidence {
+  id: string;
+  taskId: string;
+  /** Braivanta-owned OCR/transcription execution identity; absent on legacy evidence. */
+  transcriptionRunId?: string | null;
+  reviewItemId: string | null;
+  source: SpecialistCorrectionSource;
+  changeType: "text_replacement";
+  /** Available for passage corrections; null for whole-document edits without a safe mapping. */
+  machineText: string | null;
+  previousText: string;
+  reviewedText: string;
+  evidenceCategory: SpecialistCorrectionCategory;
+  attribution: SpecialistCorrectionAttribution;
+  reviewerId: string;
+  reviewedAt: string;
+  reviewerReason: string;
+  sourceEvidenceAvailability: ProvenanceAvailability;
+  relatedStandardRuleIds: string[];
+  uncertaintyState: TranscriptionUncertaintyState | null;
+}
+
 /** Passage-level uncertainty that can be mapped exactly onto visible translated text. */
 export interface TranscriptionReviewItem {
   id: string;
+  /** Braivanta-owned run scope; absent on review items created before run lineage existed. */
+  transcriptionRunId?: string | null;
   start: number;
   end: number;
   machineText: string;
@@ -234,6 +285,8 @@ export interface BrailleHybridReview {
 }
 
 export interface Transcription {
+  /** Braivanta-owned identity for this OCR/transcription execution; absent on legacy records. */
+  transcriptionRunId?: string | null;
   draftText: string;
   editedText: string;
   finalText: string | null;
@@ -273,6 +326,8 @@ export interface Transcription {
   provenance?: TranscriptionProvenance | null;
   /** Original automated standards outcomes plus append-only specialist decisions. */
   standardsEvaluations?: StandardRuleEvaluation[] | null;
+  /** Additive Stage 4 evidence; absence on historical records means not recorded. */
+  specialistCorrectionEvidence?: SpecialistCorrectionEvidence[] | null;
 }
 
 export interface FeedbackFindings {
@@ -280,6 +335,23 @@ export interface FeedbackFindings {
   contractions: string[];
   formatting: string[];
   unclear: string[];
+}
+
+export type SubjectContentCompleteness =
+  | "not_recorded"
+  | "complete"
+  | "partially_complete"
+  | "incomplete"
+  | "not_applicable";
+
+/** Teacher-owned educational judgement made only from a specialist-verified transcription. */
+export interface TeacherSubjectAssessment {
+  strengths: string;
+  misconceptions: string;
+  completeness: SubjectContentCompleteness;
+  reasoning: string;
+  assessedBy: string;
+  assessedAt: string;
 }
 
 export interface FeedbackReport {
@@ -297,6 +369,8 @@ export interface FeedbackReport {
   teacherReviewedBy: string | null;
   teacherReviewedAt: string | null;
   createdAt: string;
+  /** Optional for historical reports and AI drafts; populated only by an authorised human. */
+  subjectAssessment?: TeacherSubjectAssessment | null;
 }
 
 export interface BrailleTask {

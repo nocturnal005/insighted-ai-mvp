@@ -13,6 +13,22 @@ const NON_CONTEXTUAL_CATEGORIES = new Set([
   "secondary_review_unavailable",
 ]);
 
+/**
+ * Review-item IDs are stable inside one run and cannot collide with the same offsets/index
+ * from another run. Missing run identity preserves the historical pre-lineage ID shape.
+ */
+export function reviewItemIdForRun(
+  transcriptionRunId: string | null | undefined,
+  start: number,
+  end: number,
+  index: number,
+): string {
+  const runId = transcriptionRunId?.trim();
+  return runId
+    ? `review-${runId}-${start}-${end}-${index}`
+    : `review-${start}-${end}-${index}`;
+}
+
 export const UNAVAILABLE_CONFIDENCE: TranscriptionConfidenceEvidence = {
   availability: "unavailable",
   value: null,
@@ -119,7 +135,10 @@ const SEVERITY_PRIORITY: Record<TranscriptionReviewItem["severity"], number> = {
 };
 
 /** Build only items whose evidence maps unambiguously to an exact visible excerpt. */
-export function buildTranscriptionReviewItems(result: BrailleOcrResult): TranscriptionReviewItem[] {
+export function buildTranscriptionReviewItems(
+  result: BrailleOcrResult,
+  transcriptionRunId?: string | null,
+): TranscriptionReviewItem[] {
   const candidates: ReviewCandidate[] = result.flags
     .map((flag, index) => {
       const item = itemFromFlag(result, flag, index);
@@ -183,7 +202,11 @@ export function buildTranscriptionReviewItems(result: BrailleOcrResult): Transcr
       occupied.push({ start: item.start, end: item.end });
       return true;
     })
-    .map(({ item }, index) => ({ ...item, id: `review-${item.start}-${item.end}-${index}` }));
+    .map(({ item }, index) => ({
+      ...item,
+      transcriptionRunId: transcriptionRunId ?? null,
+      id: reviewItemIdForRun(transcriptionRunId, item.start, item.end, index),
+    }));
 }
 
 /** Preserve substantive high-priority reasons that cannot be attached to a safe range. */
