@@ -17,6 +17,9 @@ const checks = [
   ["capability map records unsupported claims", "docs/stage-5-evidence-defensibility-map.md", "Unsupported at Stage 5"],
   ["behavioural coverage exists", "tests/stage5-evidence-defensibility.test.ts", "S5-"],
   ["durable persistence coverage exists", "tests/stage5-evidence-defensibility.test.ts", "S5-20"],
+  ["verifiedAt evidence preserves nullable status without fallback substitution", "src/lib/stage5-evidence.ts", "verifiedAt: summary.specialistVerification.verifiedAt,"],
+  ["UI handles unrecorded verification timestamps truthfully", "src/app/(app)/pupils/[id]/evidence/page.tsx", '"verification time not recorded"'],
+  ["regression coverage for FND-5-01 exists", "tests/stage5-evidence-defensibility.test.ts", "S5-21"],
 ];
 
 let failures = 0;
@@ -27,11 +30,11 @@ for (const [label, file, needle] of checks) {
   if (!pass) failures += 1;
 }
 
-const forbidden = ["proficiency score", "predicted grade", "progress percentage", "time-saving metric", "learner-fault"];
+const forbidden = ["proficiency score", "predicted grade", "progress percentage", "time-saving metric", "learner-fault", "specialistVerification.verifiedAt ?? summary.submittedAt"];
 for (const needle of forbidden) {
   const content = readFileSync("src/lib/stage5-evidence.ts", "utf8");
   const pass = !content.includes(needle);
-  console.log(`  [${pass ? "PASS" : "FAIL"}] no generated ${needle}`);
+  console.log(`  [${pass ? "PASS" : "FAIL"}] no generated/fabricated ${needle}`);
   if (!pass) failures += 1;
 }
 

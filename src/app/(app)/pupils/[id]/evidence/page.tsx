@@ -62,7 +62,7 @@ export default async function LearnerEvidencePage(props: { params: Promise<{ id:
             <Card key={entry.taskId}>
               <CardHeader>
                 <div className="flex min-w-0 items-center gap-2"><FileCheck2 className="h-4 w-4 text-accent-700" /><CardTitle>{entry.title}</CardTitle></div>
-                <span className="text-xs text-zinc-400">{entry.subject ?? "Subject not recorded"} · verified {new Date(entry.verifiedAt).toLocaleDateString("en-GB")}</span>
+                <span className="text-xs text-zinc-400">{entry.subject ?? "Subject not recorded"} · {entry.verifiedAt ? `verified ${new Date(entry.verifiedAt).toLocaleDateString("en-GB")}` : "verification time not recorded"}</span>
               </CardHeader>
               <CardBody className="space-y-4 text-sm text-zinc-700">
                 <EvidenceRows rows={[

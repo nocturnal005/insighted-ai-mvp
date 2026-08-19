@@ -67,7 +67,7 @@ export interface LongitudinalEvidenceEntry {
   title: string;
   subject: string | null;
   submittedAt: string;
-  verifiedAt: string;
+  verifiedAt: string | null;
   transcriptionRun: { state: EvidenceRecordState; id: string | null };
   specialistVerification: VerifiedEvidenceSummary["specialistVerification"];
   reviewBurden: VerifiedEvidenceSummary["reviewBurden"];
@@ -187,7 +187,7 @@ export function buildLongitudinalEvidenceHistory(
         title: summary.title,
         subject: summary.subject,
         submittedAt: summary.submittedAt,
-        verifiedAt: summary.specialistVerification.verifiedAt ?? summary.submittedAt,
+        verifiedAt: summary.specialistVerification.verifiedAt,
         transcriptionRun: summary.transcriptionRun,
         specialistVerification: summary.specialistVerification,
         reviewBurden: summary.reviewBurden,
@@ -197,5 +197,9 @@ export function buildLongitudinalEvidenceHistory(
         provenance: summary.provenance,
       };
     })
-    .sort((a, b) => a.verifiedAt.localeCompare(b.verifiedAt) || a.taskId.localeCompare(b.taskId));
+    .sort((a, b) => {
+      const aTime = a.verifiedAt ?? a.submittedAt;
+      const bTime = b.verifiedAt ?? b.submittedAt;
+      return aTime.localeCompare(bTime) || a.taskId.localeCompare(b.taskId);
+    });
 }

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -235,10 +235,14 @@ test("S5-15: legacy tasks without Stage 3 or Stage 4 fields remain valid", () =>
   legacy.transcription!.provenance = undefined;
   legacy.transcription!.standardsEvaluations = undefined;
   legacy.transcription!.specialistCorrectionEvidence = undefined;
+  legacy.transcription!.specialistVerifiedAt = null;
+  legacy.transcription!.specialistVerifiedBy = null;
   const summary = buildVerifiedEvidenceSummary(legacy);
   assert.equal(summary.transcriptionRun.state, "not_recorded");
   assert.equal(summary.provenance, "not_recorded");
   assert.equal(summary.corrections.state, "not_recorded");
+  assert.equal(summary.specialistVerification.state, "not_recorded");
+  assert.equal(summary.specialistVerification.verifiedAt, null);
 });
 
 test("S5-16: unverified submissions do not enter longitudinal evidence", () => {
@@ -313,3 +317,41 @@ test("S5-20: production persistence and hydration preserve evidence usable by St
     rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test("S5-21: legacy task with missing verification timestamp enters verified history with verifiedAt null", () => {
+  const legacyVerified = task({ id: "bt_legacy_verified", createdAt: "2026-08-01T10:00:00.000Z" });
+  legacyVerified.transcription!.status = "specialist_verified";
+  legacyVerified.transcription!.finalText = "The water cycle.";
+  legacyVerified.transcription!.specialistVerifiedAt = null;
+  legacyVerified.transcription!.specialistVerifiedBy = null;
+
+  const entries = buildLongitudinalEvidenceHistory([legacyVerified], "pupil_stage5");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].taskId, "bt_legacy_verified");
+  assert.equal(entries[0].verifiedAt, null);
+  assert.equal(entries[0].submittedAt, "2026-08-01T10:00:00.000Z");
+  assert.notEqual(entries[0].verifiedAt, entries[0].submittedAt);
+});
+
+test("S5-22: chronological ordering remains deterministic when verified task has no verification timestamp", () => {
+  const taskWithVerifiedDate = task({ id: "bt_verified_later", createdAt: "2026-08-01T08:00:00.000Z" });
+  taskWithVerifiedDate.transcription!.specialistVerifiedAt = "2026-08-05T12:00:00.000Z";
+
+  const taskWithoutVerifiedDate = task({ id: "bt_legacy_earlier", createdAt: "2026-08-02T08:00:00.000Z" });
+  taskWithoutVerifiedDate.transcription!.specialistVerifiedAt = null;
+
+  const history = buildLongitudinalEvidenceHistory([taskWithVerifiedDate, taskWithoutVerifiedDate], "pupil_stage5");
+  assert.deepEqual(history.map((e) => e.taskId), ["bt_legacy_earlier", "bt_verified_later"]);
+  assert.equal(history[0].verifiedAt, null);
+  assert.equal(history[1].verifiedAt, "2026-08-05T12:00:00.000Z");
+});
+
+test("S5-23: learner evidence presentation explicitly represents unrecorded verification time", () => {
+  const pageSource = readFileSync("src/app/(app)/pupils/[id]/evidence/page.tsx", "utf8");
+  assert.equal(pageSource.includes("verified {new Date(entry.verifiedAt).toLocaleDateString("), false);
+  assert.equal(pageSource.includes("verification time not recorded"), true);
+
+  const evidenceLibSource = readFileSync("src/lib/stage5-evidence.ts", "utf8");
+  assert.equal(evidenceLibSource.includes("specialistVerification.verifiedAt ?? summary.submittedAt"), false);
+});
+
