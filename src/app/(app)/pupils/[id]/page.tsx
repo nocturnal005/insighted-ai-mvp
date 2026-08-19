@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ScanText, ImageIcon, Layers } from "lucide-react";
+import { ArrowLeft, ScanText, ImageIcon, Layers, FileCheck2 } from "lucide-react";
 import { requireUser } from "@/lib/session";
 import { getPupil, getPupilWork } from "@/lib/data";
 import { VISUAL_TYPE_LABELS } from "@/lib/braille-engine";
@@ -10,10 +10,11 @@ import { formatRelative } from "@/lib/utils";
 import type { TaskStatus } from "@/lib/types";
 import { hydrateBrailleTasks } from "@/lib/durable-braille";
 import { hydrateStemTasks, hydrateVisualTasks } from "@/lib/durable-demo";
+import { can } from "@/lib/rbac";
 
 export default async function PupilDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  await requireUser();
+  const user = await requireUser();
   await Promise.all([
     hydrateBrailleTasks(),
     hydrateVisualTasks(),
@@ -38,6 +39,13 @@ export default async function PupilDetailPage(props: { params: Promise<{ id: str
         <CardHeader><CardTitle>Support notes</CardTitle></CardHeader>
         <CardBody className="text-sm text-zinc-700">{pupil.supportNotes}</CardBody>
       </Card>
+
+      {can(user.role, "pupil.evidence.read") && (
+        <Link href={`/pupils/${pupil.id}/evidence`} className="mb-5 flex items-center justify-between rounded-xl border border-accent-100 bg-accent-50/50 px-5 py-4 text-sm text-zinc-800 transition-colors hover:bg-accent-50">
+          <span className="flex items-center gap-2 font-medium"><FileCheck2 className="h-4 w-4 text-accent-700" /> Verified evidence history</span>
+          <span className="text-xs text-zinc-500">View chronological record</span>
+        </Link>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Linked work</CardTitle><span className="text-xs text-zinc-400">Approved outputs save here</span></CardHeader>

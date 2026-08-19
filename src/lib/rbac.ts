@@ -14,6 +14,7 @@ export type Permission =
   | "visual.approve"
   | "stem.approve"
   | "export"
+  | "pupil.evidence.read"
   | "audit.read"
   | "org.manage";
 
@@ -32,10 +33,10 @@ const VERIFIER: Permission[] = [
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   teaching_assistant: ["task.create", "transcription.edit", "transcription.request_review", "description.edit"],
-  teacher: ["task.create", "description.edit", "feedback.generate", "feedback.approve", "visual.approve", "stem.approve", "export"],
-  qtvi: [...VERIFIER, "transcription.specialist_verify", "description.edit", "audit.read"],
-  senco: ["task.create", "task.archive", "audit.read", "export"],
-  admin: [...VERIFIER, "transcription.specialist_verify", "description.edit", "audit.read", "org.manage"],
+  teacher: ["task.create", "description.edit", "feedback.generate", "feedback.approve", "visual.approve", "stem.approve", "export", "pupil.evidence.read"],
+  qtvi: [...VERIFIER, "transcription.specialist_verify", "description.edit", "pupil.evidence.read", "audit.read"],
+  senco: ["task.create", "task.archive", "pupil.evidence.read", "audit.read", "export"],
+  admin: [...VERIFIER, "transcription.specialist_verify", "description.edit", "pupil.evidence.read", "audit.read", "org.manage"],
 };
 
 export function can(role: UserRole, permission: Permission, options?: { brailleLiterate?: boolean }): boolean {
