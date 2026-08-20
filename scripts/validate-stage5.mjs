@@ -20,6 +20,7 @@ const checks = [
   ["verifiedAt evidence preserves nullable status without fallback substitution", "src/lib/stage5-evidence.ts", "verifiedAt: summary.specialistVerification.verifiedAt,"],
   ["UI handles unrecorded verification timestamps truthfully", "src/app/(app)/pupils/[id]/evidence/page.tsx", '"verification time not recorded"'],
   ["regression coverage for FND-5-01 exists", "tests/stage5-evidence-defensibility.test.ts", "S5-21"],
+  ["specialist verification presentation distinguishes identity from time", "src/lib/stage5-evidence.ts", "identity not recorded · verification time recorded"],
 ];
 
 let failures = 0;

@@ -77,6 +77,19 @@ export interface LongitudinalEvidenceEntry {
   provenance: VerifiedEvidenceSummary["provenance"];
 }
 
+/**
+ * Describes only the availability of bounded specialist-verification evidence.
+ * It intentionally never exposes the specialist identity itself.
+ */
+export function specialistVerificationLabel(verifiedBy: string | null, verifiedAt: string | null): string {
+  const verificationDate = verifiedAt === null ? null : new Date(verifiedAt).toLocaleDateString("en-GB");
+
+  if (verifiedBy !== null && verificationDate !== null) return `identity and verification time recorded · ${verificationDate}`;
+  if (verifiedBy !== null) return "identity recorded · verification time not recorded";
+  if (verificationDate) return `identity not recorded · verification time recorded ${verificationDate}`;
+  return "not recorded";
+}
+
 function count(value: number, state: EvidenceRecordState = "recorded"): EvidenceCount {
   return { state, value };
 }

@@ -9,6 +9,7 @@ import { can } from "../src/lib/rbac.ts";
 import {
   buildLongitudinalEvidenceHistory,
   buildVerifiedEvidenceSummary,
+  specialistVerificationLabel,
 } from "../src/lib/stage5-evidence.ts";
 import type { BrailleTask, SpecialistCorrectionEvidence } from "../src/lib/types.ts";
 
@@ -353,5 +354,29 @@ test("S5-23: learner evidence presentation explicitly represents unrecorded veri
 
   const evidenceLibSource = readFileSync("src/lib/stage5-evidence.ts", "utf8");
   assert.equal(evidenceLibSource.includes("specialistVerification.verifiedAt ?? summary.submittedAt"), false);
+});
+
+test("S5-24: specialist verification presents both recorded identity and time", () => {
+  assert.equal(
+    specialistVerificationLabel("u_qtvi", at),
+    "identity and verification time recorded · 19/08/2026",
+  );
+});
+
+test("S5-25: specialist verification retains time without claiming a missing identity", () => {
+  const label = specialistVerificationLabel(null, at);
+  assert.equal(label, "identity not recorded · verification time recorded 19/08/2026");
+  assert.equal(label.includes("identity recorded"), false);
+});
+
+test("S5-26: specialist verification retains identity when time is not recorded", () => {
+  assert.equal(
+    specialistVerificationLabel("u_qtvi", null),
+    "identity recorded · verification time not recorded",
+  );
+});
+
+test("S5-27: specialist verification explicitly records neither missing fact", () => {
+  assert.equal(specialistVerificationLabel(null, null), "not recorded");
 });
 

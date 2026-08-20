@@ -8,6 +8,7 @@ import { can } from "@/lib/rbac";
 import { requireUser } from "@/lib/session";
 import {
   buildLongitudinalEvidenceHistory,
+  specialistVerificationLabel,
   type CorrectionCategoryCount,
   type EvidenceCount,
   type EvidenceRecordState,
@@ -67,7 +68,7 @@ export default async function LearnerEvidencePage(props: { params: Promise<{ id:
               <CardBody className="space-y-4 text-sm text-zinc-700">
                 <EvidenceRows rows={[
                   ["Transcription run", entry.transcriptionRun.id ?? stateLabel(entry.transcriptionRun.state)],
-                  ["Specialist verification", entry.specialistVerification.verifiedAt ? `identity recorded · ${new Date(entry.specialistVerification.verifiedAt).toLocaleDateString("en-GB")}` : stateLabel(entry.specialistVerification.state)],
+                  ["Specialist verification", specialistVerificationLabel(entry.specialistVerification.verifiedBy, entry.specialistVerification.verifiedAt)],
                   ["Flagged passages", countLabel(entry.reviewBurden.flagged)],
                   ["Reviewed / corrected / confirmed / re-scan", `${countLabel(entry.reviewBurden.reviewed)} / ${countLabel(entry.reviewBurden.corrected)} / ${countLabel(entry.reviewBurden.confirmed)} / ${countLabel(entry.reviewBurden.needsRescan)}`],
                   ["Unresolved review items", countLabel(entry.reviewBurden.unresolved)],
